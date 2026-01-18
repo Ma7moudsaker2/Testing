@@ -1,0 +1,683 @@
+{% extends "base.html" %}
+{% block title %}Barcode Scanner - Stock Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="fas fa-camera"></i> Barcode Scanner</h2>
+            <p class="text-muted mb-0">Scan barcodes to update inventory</p>
+        </div>
+    </div>
+
+    <!-- Session Control -->
+    <div class="card mb-4" id="sessionControl">
+        <div class="card-body">
+            <h5 class="card-title mb-3"><i class="fas fa-play-circle"></i> Session Control</h5>
+            
+            {% if not active_session.exists %}
+            <!-- Start New Session -->
+            <div id="startSessionSection">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label"><strong>Select Mode:</strong></label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="sessionMode" id="modeAdd" value="add" checked>
+                            <label class="btn btn-outline-success" for="modeAdd">
+                                <i class="fas fa-plus-circle"></i> Add Stock
+                            </label>
+                            
+                            <input type="radio" class="btn-check" name="sessionMode" id="modeRemove" value="remove">
+                            <label class="btn btn-outline-danger" for="modeRemove">
+                                <i class="fas fa-minus-circle"></i> Remove Stock
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <button class="btn btn-primary btn-lg" id="startSessionBtn">
+                    <i class="fas fa-play"></i> Start New Session
+                </button>
+            </div>
+            {% else %}
+            <!-- Active Session Info -->
+            <div id="activeSessionSection">
+                <div class="alert alert-info mb-3">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>Active Session:</strong> 
+                    <span class="badge bg-{{ 'success' if active_session.mode == 'add' else 'danger' }}">
+                        {{ active_session.mode.upper() }} MODE
+                    </span>
+                    | Started: {{ active_session.created_at }}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Scanner Input (Hidden until session starts) -->
+    <div class="card mb-4 {% if not active_session.exists %}d-none{% endif %}" id="scannerSection">
+        <div class="card-body">
+            <h5 class="card-title mb-3"><i class="fas fa-barcode"></i> Scan Barcode</h5>
+            
+            <!-- Camera Scanner (Primary) -->
+            <div class="mb-4">
+                <button class="btn btn-primary btn-lg w-100" id="startCameraBtn" style="padding: 20px;">
+                    <i class="fas fa-camera" style="font-size: 1.5em;"></i>
+                    <br>
+                    <strong style="font-size: 1.2em;">START CAMERA SCANNER</strong>
+                </button>
+            </div>
+
+            <!-- Camera View (Hidden by default) -->
+            <div id="cameraView" style="display: none;">
+                <div class="text-center mb-3">
+                    <div id="reader" style="width: 100%; max-width: 600px; margin: 0 auto;"></div>
+                </div>
+                <div class="text-center">
+                    <button class="btn btn-danger" id="stopCameraBtn">
+                        <i class="fas fa-stop"></i> Stop Camera
+                    </button>
+                </div>
+            </div>
+
+            <!-- Manual/USB Input -->
+            <div class="mt-4">
+                <label class="form-label"><strong>Or Enter Manually / USB Scanner:</strong></label>
+                <div class="input-group input-group-lg">
+                    <input type="text" class="form-control" id="barcodeInput" 
+                           placeholder="Type or scan barcode here..." autofocus>
+                    <button class="btn btn-success" id="scanBtn">
+                        <i class="fas fa-search"></i> Scan
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scanned Items Table (Hidden until session has items) -->
+    <div class="card mb-4 {% if not active_session.exists or not active_session.items %}d-none{% endif %}" id="itemsSection">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="fas fa-list"></i> Scanned Items</h5>
+            <span id="sessionModeIndicator" class="badge bg-success">ADD MODE</span>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover" id="itemsTable">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th style="width: 80px;">Image</th>
+                            <th>Code</th>
+                            <th>Brand</th>
+                            <th>Color</th>
+                            <th style="width: 100px;">Qty</th>
+                            <th style="width: 80px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="itemsTableBody">
+                        <!-- Items will be added here dynamically -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Summary -->
+            <div class="row mt-3">
+                <div class="col-md-6">
+                    <h5>Summary:</h5>
+                    <p class="mb-1">
+                        <strong>Total Items:</strong> 
+                        <span id="totalItems" class="badge bg-primary">0</span>
+                    </p>
+                    <p class="mb-0">
+                        <strong>Total Quantity:</strong> 
+                        <span id="totalQuantity" class="badge bg-info">0</span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="mt-4">
+                <button class="btn btn-success btn-lg me-2" id="confirmBtn">
+                    <i class="fas fa-check"></i> Confirm & Update Stock
+                </button>
+                <button class="btn btn-danger btn-lg me-2" id="cancelBtn">
+                    <i class="fas fa-times"></i> Cancel Session
+                </button>
+                <button class="btn btn-warning btn-lg" id="clearBtn">
+                    <i class="fas fa-trash"></i> Clear All Items
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="card {% if not active_session.exists %}d-none{% endif %}" id="recentActivity">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-history"></i> Recent Activity</h5>
+        </div>
+        <div class="card-body">
+            <ul id="activityList" class="list-unstyled mb-0">
+                <li class="text-muted"><i>No activity yet</i></li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Confirm Modal -->
+<div class="modal fade" id="confirmModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-check-circle"></i> Confirm Stock Update
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>You are about to <span id="confirmMode">ADD</span> stock for:</strong></p>
+                <ul>
+                    <li><strong><span id="confirmItems">0</span></strong> products</li>
+                    <li><strong><span id="confirmQuantity">0</span></strong> total items</li>
+                </ul>
+                <p class="mb-0">This action will update the inventory. Are you sure?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="confirmYesBtn">
+                    <i class="fas fa-check"></i> Yes, Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Cancel Modal -->
+<div class="modal fade" id="cancelModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle"></i> Cancel Session
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>Are you sure you want to cancel this session?</strong></p>
+                <p class="mb-0 text-danger">
+                    All scanned items (<span id="cancelItemCount">0</span>) will be lost.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Go Back</button>
+                <button type="button" class="btn btn-danger" id="cancelYesBtn">
+                    <i class="fas fa-times"></i> Yes, Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- HTML5 QR Code Library -->
+<script src="https://unpkg.com/html5-qrcode"></script>
+
+<script>
+// Session data from server (Safe parsing)
+{% if active_session and active_session.exists %}
+let sessionActive = true;
+let sessionMode = '{{ active_session.mode }}';
+// Items already parsed in Python, just output as JSON
+let sessionItems = {{ active_session.items_json | safe }};
+let html5QrCode = null;
+
+console.log('🔍 Session Active:', sessionActive);
+console.log('🔍 Session Mode:', sessionMode);
+console.log('🔍 Session Items:', sessionItems);
+console.log('🔍 Items type:', typeof sessionItems);
+{% else %}
+let sessionActive = false;
+let sessionMode = 'add';
+let sessionItems = [];
+let html5QrCode = null;
+
+console.log('🔍 No active session');
+{% endif %}
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🔍 DOMContentLoaded - sessionActive:', sessionActive);
+    console.log('🔍 DOMContentLoaded - sessionItems:', sessionItems);
+    
+    if (sessionActive) {
+        loadSessionItems();
+    }
+    
+    // Set mode indicator
+    updateModeIndicator();
+});
+
+// Start Session
+document.getElementById('startSessionBtn')?.addEventListener('click', function() {
+    const mode = document.querySelector('input[name="sessionMode"]:checked').value;
+    
+    fetch('/barcode/session/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: mode })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', data.message);
+            
+            // Reload page to refresh session data
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast('error', data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('error', 'Failed to start session');
+    });
+});
+
+// Camera Scanner
+document.getElementById('startCameraBtn')?.addEventListener('click', function() {
+    document.getElementById('cameraView').style.display = 'block';
+    this.style.display = 'none';
+    
+    html5QrCode = new Html5Qrcode("reader");
+    
+    Html5Qrcode.getCameras().then(cameras => {
+        if (cameras && cameras.length) {
+            const cameraId = cameras[0].id;
+            
+            html5QrCode.start(
+                cameraId,
+                {
+                    fps: 10,
+                    qrbox: { width: 250, height: 250 }
+                },
+                (decodedText, decodedResult) => {
+                    // Barcode scanned
+                    processScan(decodedText);
+                },
+                (errorMessage) => {
+                    // Scanning...
+                }
+            ).catch(err => {
+                console.error('Camera error:', err);
+                showToast('error', 'Failed to start camera');
+            });
+        }
+    }).catch(err => {
+        console.error('No camera found:', err);
+        showToast('error', 'No camera found');
+    });
+});
+
+// Stop Camera
+document.getElementById('stopCameraBtn')?.addEventListener('click', function() {
+    if (html5QrCode) {
+        html5QrCode.stop().then(() => {
+            document.getElementById('cameraView').style.display = 'none';
+            document.getElementById('startCameraBtn').style.display = 'block';
+        }).catch(err => {
+            console.error('Error stopping camera:', err);
+        });
+    }
+});
+
+// Manual Scan Button
+document.getElementById('scanBtn')?.addEventListener('click', function() {
+    const barcode = document.getElementById('barcodeInput').value.trim();
+    if (barcode) {
+        processScan(barcode);
+    }
+});
+
+// Enter key for manual input
+document.getElementById('barcodeInput')?.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        const barcode = this.value.trim();
+        if (barcode) {
+            processScan(barcode);
+        }
+    }
+});
+
+// Process Scan
+function processScan(barcode) {
+    if (!sessionActive) {
+        showToast('error', 'Please start a session first');
+        playSound('error');
+        return;
+    }
+    
+    fetch('/barcode/session/scan', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({barcode: barcode})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            playSound('success');
+            showToast('success', data.message);
+            
+            // Update session items
+            const existingIndex = sessionItems.findIndex(item => item.variant_id === data.item.variant_id);
+            
+            if (existingIndex >= 0) {
+                // Item exists - increment quantity
+                sessionItems[existingIndex].quantity = (sessionItems[existingIndex].quantity || 1) + 1;
+            } else {
+                // New item - add to list
+                sessionItems.push(data.item);
+            }
+            
+            // Update UI
+            loadSessionItems();
+            addActivity(data.message, 'success');
+            
+            // Clear input
+            document.getElementById('barcodeInput').value = '';
+            document.getElementById('barcodeInput').focus();
+        } else {
+            playSound('error');
+            showToast('error', data.error);
+            addActivity(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        playSound('error');
+        showToast('error', 'Failed to scan barcode');
+    });
+}
+
+// Load Session Items
+function loadSessionItems() {
+    const tbody = document.getElementById('itemsTableBody');
+    tbody.innerHTML = '';
+    
+    if (sessionItems.length === 0) {
+        document.getElementById('itemsSection').classList.add('d-none');
+        return;
+    }
+    
+    document.getElementById('itemsSection').classList.remove('d-none');
+    
+    sessionItems.forEach((item, index) => {
+        // Get image URL or use placeholder
+        const imageUrl = item.image_url || 'https://via.placeholder.com/100x100/f0f0f0/999999?text=No+Image';
+        
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${index + 1}</td>
+            <td>
+                <img src="${imageUrl}" 
+                     class="img-thumbnail" 
+                     style="width: 50px; height: 50px; object-fit: cover; background: #f0f0f0;"
+                     onerror="this.onerror=null; this.src='https://via.placeholder.com/100x100/f0f0f0/999999?text=No+Image';">
+            </td>
+            <td><strong>${item.product_code || 'N/A'}</strong></td>
+            <td>${item.brand_name || 'N/A'}</td>
+            <td>${item.color_name || 'N/A'}</td>
+            <td><span class="badge bg-secondary">${item.quantity || 1}</span></td>
+            <td>
+                <button class="btn btn-sm btn-danger" 
+                        onclick="removeItem(${item.variant_id})">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+    
+    updateSummary();
+}
+
+// Remove Item
+function removeItem(variantId) {
+    if (!confirm('Remove this item from session?')) return;
+    
+    fetch('/barcode/session/remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ variant_id: variantId })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', data.message);
+            sessionItems = sessionItems.filter(i => i.variant_id !== variantId);
+            loadSessionItems();
+        } else {
+            showToast('error', data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('error', 'Failed to remove item');
+    });
+}
+
+// Clear All
+document.getElementById('clearBtn')?.addEventListener('click', function() {
+    if (!confirm('Clear all items from session?')) return;
+    
+    fetch('/barcode/session/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', data.message);
+            sessionItems = [];
+            loadSessionItems();
+        } else {
+            showToast('error', data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('error', 'Failed to clear session');
+    });
+});
+
+// Confirm Session
+document.getElementById('confirmBtn')?.addEventListener('click', function() {
+    if (sessionItems.length === 0) {
+        showToast('warning', 'Session is empty');
+        return;
+    }
+    
+    document.getElementById('confirmMode').textContent = sessionMode.toUpperCase();
+    document.getElementById('confirmItems').textContent = sessionItems.length;
+    document.getElementById('confirmQuantity').textContent = sessionItems.reduce((sum, item) => sum + item.quantity, 0);
+    
+    const modal = new bootstrap.Modal(document.getElementById('confirmModal'));
+    modal.show();
+});
+
+document.getElementById('confirmYesBtn')?.addEventListener('click', function() {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('confirmModal'));
+    modal.hide();
+    
+    fetch('/barcode/session/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', data.message);
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            showToast('error', data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('error', 'Failed to confirm session');
+    });
+});
+
+// Cancel Session
+document.getElementById('cancelBtn')?.addEventListener('click', function() {
+    document.getElementById('cancelItemCount').textContent = sessionItems.length;
+    const modal = new bootstrap.Modal(document.getElementById('cancelModal'));
+    modal.show();
+});
+
+document.getElementById('cancelYesBtn')?.addEventListener('click', function() {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('cancelModal'));
+    modal.hide();
+    
+    fetch('/barcode/session/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', data.message);
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast('error', data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('error', 'Failed to cancel session');
+    });
+});
+
+// Update Summary
+function updateSummary() {
+    const totalItems = sessionItems.length;
+    const totalQuantity = sessionItems.reduce((sum, item) => sum + item.quantity, 0);
+    
+    document.getElementById('totalItems').textContent = totalItems;
+    document.getElementById('totalQuantity').textContent = totalQuantity;
+}
+
+// Update Mode Indicator
+function updateModeIndicator() {
+    const indicator = document.getElementById('sessionModeIndicator');
+    if (indicator) {
+        indicator.textContent = sessionMode.toUpperCase() + ' MODE';
+        indicator.className = 'badge bg-' + (sessionMode === 'add' ? 'success' : 'danger');
+    }
+}
+
+// Add Activity
+function addActivity(message, type) {
+    const list = document.getElementById('activityList');
+    
+    // Remove "no activity" message if exists
+    const noActivityMsg = list.querySelector('.text-muted');
+    if (noActivityMsg) {
+        noActivityMsg.remove();
+    }
+    
+    const now = new Date().toLocaleTimeString();
+    
+    const item = document.createElement('li');
+    item.className = 'mb-2';
+    item.innerHTML = `
+        <i class="fas fa-${type === 'success' ? 'check-circle text-success' : 'times-circle text-danger'}"></i>
+        ${message} <small class="text-muted">(${now})</small>
+    `;
+    
+    list.prepend(item);
+    
+    // Keep only last 5 activities
+    while (list.children.length > 5) {
+        list.removeChild(list.lastChild);
+    }
+}
+
+// Play Sound (Web Audio API - no files needed)
+function playSound(type) {
+    try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        if (type === 'success') {
+            oscillator.frequency.value = 800;
+            oscillator.type = 'sine';
+        } else {
+            oscillator.frequency.value = 300;
+            oscillator.type = 'square';
+        }
+        
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.2);
+    } catch (e) {
+        console.log('Could not play sound:', e);
+    }
+}
+
+// Toast Notifications
+function showToast(type, message) {
+    const colors = {
+        success: '#28a745',
+        error: '#dc3545',
+        warning: '#ffc107',
+        info: '#17a2b8'
+    };
+    
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${colors[type]};
+        color: white;
+        padding: 15px 20px;
+        border-radius: 5px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        z-index: 10000;
+        max-width: 300px;
+        animation: slideIn 0.3s ease-out;
+    `;
+    toast.textContent = message;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease-out';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+</script>
+
+<style>
+@keyframes slideIn {
+    from { transform: translateX(400px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideOut {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(400px); opacity: 0; }
+}
+
+#reader {
+    border: 2px solid #007bff;
+    border-radius: 10px;
+}
+</style>
+
+{% endblock %}

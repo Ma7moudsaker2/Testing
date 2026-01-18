@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Stock Management{% endblock %}</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <nav id="sidebar" class="col-md-3 col-lg-2 d-md-block sidebar">
+                <div class="position-sticky pt-3">
+                    <!-- Logo / Brand -->
+                    <div class="sidebar-brand text-center mb-4">
+                        <i class="fas fa-boxes fa-2x"></i>
+                        <h5 class="mt-2">Stock Management</h5>
+                        <small class="text-muted">by {{ full_name or 'User' }}</small>
+                    </div>
+
+                    <ul class="nav flex-column">
+                        <!-- Dashboard -->
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" 
+                               href="{{ url_for('dashboard') }}">
+                                <i class="fas fa-tachometer-alt"></i>
+                                <span>Dashboard</span>
+                            </a>
+                        </li>
+
+                        <!-- Products Section -->
+                        <li class="nav-item">
+                            <a class="nav-link" href="#productsMenu" data-bs-toggle="collapse" 
+                               aria-expanded="false">
+                                <i class="fas fa-shopping-bag"></i>
+                                <span>Products</span>
+                                <i class="fas fa-chevron-down ms-auto"></i>
+                            </a>
+                            <div class="collapse" id="productsMenu">
+                                <ul class="nav flex-column ms-3">
+                                    <li class="nav-item">
+                                        <a class="nav-link {% if request.endpoint == 'products_new' %}active{% endif %}" 
+                                           href="{{ url_for('products_new') }}">
+                                            <i class="fas fa-list"></i> All Products
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link {% if request.endpoint == 'add_product_new' %}active{% endif %}" 
+                                           href="{{ url_for('add_product_new') }}">
+                                            <i class="fas fa-plus-circle"></i> Add Single
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link {% if request.endpoint == 'add_products_multi' %}active{% endif %}" 
+                                           href="{{ url_for('add_products_multi') }}">
+                                            <i class="fas fa-plus-square"></i> Add Multiple
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+                        </li>
+
+                        <!-- Barcode System -->
+                        <li class="nav-item">
+                            <a class="nav-link" href="#barcodeMenu" data-bs-toggle="collapse" 
+                               aria-expanded="false">
+                                <i class="fas fa-barcode"></i>
+                                <span>Barcode System</span>
+                                <i class="fas fa-chevron-down ms-auto"></i>
+                            </a>
+                            <div class="collapse" id="barcodeMenu">
+                                <ul class="nav flex-column ms-3">
+                                    <li class="nav-item">
+                                        <a class="nav-link {% if request.endpoint == 'barcode_management' %}active{% endif %}" 
+                                           href="{{ url_for('barcode_management') }}">
+                                            <i class="fas fa-tasks"></i> Management
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link {% if request.endpoint == 'barcode_scanner' %}active{% endif %}" 
+                                           href="{{ url_for('barcode_scanner') }}">
+                                            <i class="fas fa-camera"></i> Scanner
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link {% if request.endpoint == 'barcode_printing' %}active{% endif %}" 
+                                           href="{{ url_for('barcode_printing') }}">
+                                            <i class="fas fa-print"></i> Printing
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+                        </li>
+
+                        <!-- Inventory -->
+                        <li class="nav-item">
+                            <a class="nav-link" href="#inventoryMenu" data-bs-toggle="collapse" 
+                               aria-expanded="false">
+                                <i class="fas fa-warehouse"></i>
+                                <span>Inventory</span>
+                                <i class="fas fa-chevron-down ms-auto"></i>
+                            </a>
+                            <div class="collapse" id="inventoryMenu">
+                                <ul class="nav flex-column ms-3">
+                                    <li class="nav-item">
+                                        <a class="nav-link {% if request.endpoint == 'inventory_management' %}active{% endif %}" 
+                                           href="{{ url_for('inventory_management') }}">
+                                            <i class="fas fa-boxes"></i> Manage Stock
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link {% if request.endpoint == 'bulk_upload_excel' %}active{% endif %}" 
+                                           href="{{ url_for('bulk_upload_excel') }}">
+                                            <i class="fas fa-file-excel"></i> Bulk Upload
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link {% if request.endpoint == 'export_products' %}active{% endif %}" 
+                                           href="{{ url_for('export_products') }}">
+                                            <i class="fas fa-download"></i> Export Data
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+                        </li>
+
+                        <!-- Settings -->
+                        <li class="nav-item">
+                            <a class="nav-link" href="#settingsMenu" data-bs-toggle="collapse" 
+                               aria-expanded="false">
+                                <i class="fas fa-cog"></i>
+                                <span>Settings</span>
+                                <i class="fas fa-chevron-down ms-auto"></i>
+                            </a>
+                            <div class="collapse" id="settingsMenu">
+                                <ul class="nav flex-column ms-3">
+                                    <li class="nav-item">
+                                        <a class="nav-link {% if request.endpoint == 'manage_brands' %}active{% endif %}" 
+                                           href="{{ url_for('manage_brands') }}">
+                                            <i class="fas fa-tag"></i> Brands
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link {% if request.endpoint == 'manage_colors' %}active{% endif %}" 
+                                           href="{{ url_for('manage_colors') }}">
+                                            <i class="fas fa-palette"></i> Colors
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link {% if request.endpoint == 'manage_product_types' %}active{% endif %}" 
+                                           href="{{ url_for('manage_product_types') }}">
+                                            <i class="fas fa-shapes"></i> Product Types
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link {% if request.endpoint == 'manage_tags' %}active{% endif %}" 
+                                           href="{{ url_for('manage_tags') }}">
+                                            <i class="fas fa-tags"></i> Tags
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link {% if request.endpoint == 'manage_trader_categories' %}active{% endif %}" 
+                                           href="{{ url_for('manage_trader_categories') }}">
+                                            <i class="fas fa-users"></i> Trader Categories
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+                        </li>
+
+                        <!-- Admin Section -->
+                        <li class="nav-item">
+                            <a class="nav-link" href="#adminMenu" data-bs-toggle="collapse" 
+                               aria-expanded="false">
+                                <i class="fas fa-shield-alt"></i>
+                                <span>Admin</span>
+                                <i class="fas fa-chevron-down ms-auto"></i>
+                            </a>
+                            <div class="collapse" id="adminMenu">
+                                <ul class="nav flex-column ms-3">
+                                    <li class="nav-item">
+                                        <a class="nav-link {% if request.endpoint == 'user_management' %}active{% endif %}" 
+                                           href="{{ url_for('user_management') }}">
+                                            <i class="fas fa-users-cog"></i> Users
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link {% if request.endpoint == 'logs' %}active{% endif %}" 
+                                           href="{{ url_for('logs') }}">
+                                            <i class="fas fa-history"></i> Activity Logs
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link {% if request.endpoint == 'backup_system' %}active{% endif %}" 
+                                           href="{{ url_for('backup_status') }}">
+                                            <i class="fas fa-database"></i> Backup System
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+                        </li>
+
+                        <!-- Divider -->
+                        <hr class="my-3">
+
+                        <!-- Logout -->
+                        <li class="nav-item">
+                            <a class="nav-link text-danger" href="{{ url_for('logout') }}">
+                                <i class="fas fa-sign-out-alt"></i>
+                                <span>Logout</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <!-- Main Content -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+                <!-- Flash Messages -->
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        <div class="mt-3">
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endwith %}
+
+                <!-- Page Content -->
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
+
+<style>
+/* Sidebar Styles */
+.sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 100;
+    padding: 0;
+    box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    overflow-y: auto;
+}
+
+.sidebar-brand {
+    color: white;
+    padding: 20px 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-brand i {
+    color: white;
+}
+
+.sidebar-brand h5 {
+    color: white;
+    font-weight: bold;
+    margin: 10px 0 5px 0;
+}
+
+.sidebar-brand small {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.85em;
+}
+
+.sidebar .nav-link {
+    color: rgba(255, 255, 255, 0.8);
+    padding: 12px 20px;
+    border-radius: 5px;
+    margin: 2px 10px;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+}
+
+.sidebar .nav-link:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateX(5px);
+}
+
+.sidebar .nav-link.active {
+    color: white;
+    background: rgba(255, 255, 255, 0.2);
+    font-weight: bold;
+}
+
+.sidebar .nav-link i {
+    margin-right: 10px;
+    width: 20px;
+    text-align: center;
+}
+
+.sidebar .nav-link .fa-chevron-down {
+    margin-left: auto;
+    margin-right: 0;
+    font-size: 0.8em;
+    transition: transform 0.3s ease;
+}
+
+.sidebar .nav-link[aria-expanded="true"] .fa-chevron-down {
+    transform: rotate(180deg);
+}
+
+.sidebar .collapse .nav-link {
+    padding: 8px 15px;
+    font-size: 0.9em;
+    margin: 1px 5px;
+}
+
+.sidebar hr {
+    border-color: rgba(255, 255, 255, 0.2);
+    margin: 10px 20px;
+}
+
+.sidebar .text-danger {
+    color: #ff6b6b !important;
+}
+
+.sidebar .text-danger:hover {
+    background: rgba(255, 107, 107, 0.2) !important;
+}
+
+/* Scrollbar Styling */
+.sidebar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+/* Mobile Responsive */
+@media (max-width: 767.98px) {
+    .sidebar {
+        position: relative;
+        height: auto;
+    }
+}
+</style>

@@ -1,0 +1,490 @@
+{% extends "base.html" %}
+{% block title %}Barcode Management - Stock Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="fas fa-barcode"></i> Barcode Management</h2>
+            <p class="text-muted mb-0">Generate and manage product barcodes</p>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2">Total Products</h6>
+                    <h3 class="card-title mb-0">{{ stats.total_variants }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2">With Barcode</h6>
+                    <h3 class="card-title mb-0">{{ stats.with_barcode }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2">Without Barcode</h6>
+                    <h3 class="card-title mb-0">{{ stats.without_barcode }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2">Completion Rate</h6>
+                    <h3 class="card-title mb-0">{{ stats.completion_rate }}%</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('barcode_management') }}" id="filterForm">
+                <input type="hidden" name="tab" value="{{ tab }}">
+                <div class="row">
+                    <div class="col-md-3">
+                        <input type="text" class="form-control" name="search" 
+                               placeholder="Search code/brand/color..." value="{{ search }}">
+                    </div>
+                    <div class="col-md-2">
+                        <select class="form-select" name="brand">
+                            <option value="">All Brands</option>
+                            {% for brand in brands %}
+                            <option value="{{ brand }}" {% if brand == brand_filter %}selected{% endif %}>
+                                {{ brand }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <select class="form-select" name="type">
+                            <option value="">All Types</option>
+                            {% for type in types %}
+                            <option value="{{ type }}" {% if type == type_filter %}selected{% endif %}>
+                                {{ type }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <select class="form-select" name="color">
+                            <option value="">All Colors</option>
+                            {% for color in colors %}
+                            <option value="{{ color }}" {% if color == color_filter %}selected{% endif %}>
+                                {{ color }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-filter"></i> Apply Filters
+                        </button>
+                        <a href="{{ url_for('barcode_management') }}?tab={{ tab }}" class="btn btn-secondary">
+                            <i class="fas fa-undo"></i> Reset
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-3" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link {% if tab == 'without' %}active{% endif %}" 
+               href="?tab=without&search={{ search }}&brand={{ brand_filter }}&type={{ type_filter }}&color={{ color_filter }}">
+                <i class="fas fa-exclamation-circle"></i> Without Barcode ({{ stats.without_barcode }})
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if tab == 'with' %}active{% endif %}" 
+               href="?tab=with&search={{ search }}&brand={{ brand_filter }}&type={{ type_filter }}&color={{ color_filter }}">
+                <i class="fas fa-check-circle"></i> With Barcode ({{ stats.with_barcode }})
+            </a>
+        </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content">
+        
+        <!-- WITHOUT BARCODE TAB -->
+        {% if tab == 'without' %}
+        <div class="tab-pane fade show active">
+            {% if variants %}
+            <div class="mb-3">
+                <button class="btn btn-success btn-lg" id="generateAllBtn">
+                    <i class="fas fa-magic"></i> Generate All Barcodes ({{ total_count }})
+                </button>
+            </div>
+
+            <!-- Cards Grid -->
+            <div class="row" id="variantsGrid">
+                {% for variant in variants %}
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100 variant-card" data-variant-id="{{ variant[0] }}">
+                        <img src="{{ variant[7] or '/static/img/no-image.png' }}" 
+                             class="card-img-top" 
+                             alt="{{ variant[1] }}"
+                             style="height: 200px; object-fit: cover;"
+                             onerror="this.src='/static/img/no-image.png'">
+                        <div class="card-body">
+                            <h6 class="card-title">{{ variant[1] }}</h6>
+                            <p class="card-text mb-1">
+                                <strong>{{ variant[2] }}</strong> - {{ variant[3] }}
+                            </p>
+                            <p class="card-text mb-2">
+                                <span class="badge" style="background-color: {{ variant[5] }}; color: white;">
+                                    {{ variant[4] }}
+                                </span>
+                            </p>
+                            <p class="card-text text-muted mb-2">
+                                <i class="fas fa-box"></i> Stock: {{ variant[6] }}
+                            </p>
+                            <button class="btn btn-primary btn-sm w-100 generate-btn" 
+                                    data-variant-id="{{ variant[0] }}"
+                                    data-product-code="{{ variant[1] }}"
+                                    data-color="{{ variant[4] }}">
+                                <i class="fas fa-barcode"></i> Generate Barcode
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Pagination -->
+            {% if has_more %}
+            <div class="text-center mt-3">
+                <a href="?tab=without&page={{ page + 1 }}&search={{ search }}&brand={{ brand_filter }}&type={{ type_filter }}&color={{ color_filter }}" 
+                   class="btn btn-outline-primary">
+                    <i class="fas fa-chevron-down"></i> Load More
+                </a>
+            </div>
+            {% endif %}
+
+            {% else %}
+            <div class="alert alert-success">
+                <i class="fas fa-check-circle"></i> All products have barcodes!
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- WITH BARCODE TAB -->
+        {% if tab == 'with' %}
+        <div class="tab-pane fade show active">
+            {% if variants %}
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th style="width: 80px;">Image</th>
+                                    <th>Code</th>
+                                    <th>Brand</th>
+                                    <th>Color</th>
+                                    <th>Stock</th>
+                                    <th>Barcode</th>
+                                    <th>Generated</th>
+                                    <th style="width: 100px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for variant in variants %}
+                                <tr>
+                                    <td>
+                                        <img src="{{ variant[7] or '/static/img/no-image.png' }}" 
+                                             class="img-thumbnail" 
+                                             style="width: 60px; height: 60px; object-fit: cover;"
+                                             onerror="this.src='/static/img/no-image.png'">
+                                    </td>
+                                    <td><strong>{{ variant[1] }}</strong></td>
+                                    <td>{{ variant[2] }}</td>
+                                    <td>
+                                        <span class="badge" style="background-color: {{ variant[5] }}; color: white;">
+                                            {{ variant[4] }}
+                                        </span>
+                                    </td>
+                                    <td>{{ variant[6] }}</td>
+                                    <td>
+                                        <code>{{ variant[9][:10] }}...</code>
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">
+                                            {{ variant[11][:10] if variant[11] else 'N/A' }}
+                                        </small>
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-info view-barcode-btn" 
+                                                data-variant-id="{{ variant[0] }}"
+                                                data-barcode="{{ variant[9] }}"
+                                                data-image="{{ variant[10] }}"
+                                                data-product="{{ variant[1] }}"
+                                                data-color="{{ variant[4] }}">
+                                            <i class="fas fa-eye"></i> View
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pagination -->
+            {% if has_more %}
+            <div class="text-center mt-3">
+                <a href="?tab=with&page={{ page + 1 }}&search={{ search }}&brand={{ brand_filter }}&type={{ type_filter }}&color={{ color_filter }}" 
+                   class="btn btn-outline-primary">
+                    <i class="fas fa-chevron-down"></i> Load More
+                </a>
+            </div>
+            {% endif %}
+
+            {% else %}
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle"></i> No products with barcodes found.
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+
+<!-- View Barcode Modal -->
+<div class="modal fade" id="viewBarcodeModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-barcode"></i> Barcode Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <h6 id="modalProductInfo" class="mb-3"></h6>
+                <img id="modalBarcodeImage" src="" alt="Barcode" class="img-fluid mb-3" style="max-width: 100%;">
+                <p>
+                    <strong>Barcode Number:</strong><br>
+                    <code id="modalBarcodeNumber" style="font-size: 1.2em;"></code>
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <a id="downloadBarcodeBtn" href="" download class="btn btn-primary">
+                    <i class="fas fa-download"></i> Download Image
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Generate All Progress Modal -->
+<div class="modal fade" id="generateAllModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-spinner fa-spin"></i> Generating Barcodes...
+                </h5>
+            </div>
+            <div class="modal-body">
+                <p id="progressText">Starting generation...</p>
+                <div class="progress mb-3">
+                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                         role="progressbar" style="width: 0%">0%</div>
+                </div>
+                <p class="text-muted mb-0" id="statusText"></p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Generate Single Barcode
+document.querySelectorAll('.generate-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const variantId = this.dataset.variantId;
+        const productCode = this.dataset.productCode;
+        const color = this.dataset.color;
+        const button = this;
+        
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+        
+        fetch(`/barcode/generate/${variantId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('success', data.message);
+                // Remove card from grid
+                setTimeout(() => {
+                    button.closest('.variant-card').remove();
+                    // Update stats (reload page)
+                    location.reload();
+                }, 1000);
+            } else {
+                showToast('error', data.error);
+                button.disabled = false;
+                button.innerHTML = '<i class="fas fa-barcode"></i> Generate Barcode';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('error', 'Failed to generate barcode');
+            button.disabled = false;
+            button.innerHTML = '<i class="fas fa-barcode"></i> Generate Barcode';
+        });
+    });
+});
+
+// Generate All Barcodes
+document.getElementById('generateAllBtn')?.addEventListener('click', function() {
+    if (!confirm('Generate barcodes for all products without barcodes?')) {
+        return;
+    }
+    
+    const modal = new bootstrap.Modal(document.getElementById('generateAllModal'));
+    modal.show();
+    
+    const filters = {
+        search: '{{ search }}',
+        brand: '{{ brand_filter }}',
+        type: '{{ type_filter }}',
+        color: '{{ color_filter }}'
+    };
+    
+    fetch('/barcode/generate_all', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(filters)
+    })
+    .then(response => response.json())
+    .then(data => {
+        modal.hide();
+        
+        if (data.success) {
+            showToast('success', data.message);
+            if (data.failed_count > 0) {
+                showToast('warning', `${data.failed_count} barcodes failed to generate`);
+            }
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            showToast('error', data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        modal.hide();
+        showToast('error', 'Failed to generate barcodes');
+    });
+});
+
+// View Barcode
+document.querySelectorAll('.view-barcode-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const barcode = this.dataset.barcode;
+        const image = this.dataset.image;
+        const product = this.dataset.product;
+        const color = this.dataset.color;
+        
+        document.getElementById('modalProductInfo').textContent = `${product} - ${color}`;
+        document.getElementById('modalBarcodeImage').src = `/${image}`;
+        document.getElementById('modalBarcodeNumber').textContent = barcode;
+        document.getElementById('downloadBarcodeBtn').href = `/${image}`;
+        
+        const modal = new bootstrap.Modal(document.getElementById('viewBarcodeModal'));
+        modal.show();
+    });
+});
+
+// Toast Notifications
+function showToast(type, message) {
+    const colors = {
+        success: '#28a745',
+        error: '#dc3545',
+        warning: '#ffc107',
+        info: '#17a2b8'
+    };
+    
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${colors[type]};
+        color: white;
+        padding: 15px 20px;
+        border-radius: 5px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        z-index: 10000;
+        max-width: 300px;
+        animation: slideIn 0.3s ease-out;
+    `;
+    toast.textContent = message;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease-out';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+</script>
+
+<style>
+@keyframes slideIn {
+    from {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+}
+
+.variant-card {
+    transition: transform 0.2s;
+}
+
+.variant-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+}
+</style>
+
+{% endblock %}
