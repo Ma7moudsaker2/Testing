@@ -1312,106 +1312,134 @@ def inventory_search():
 @app.route('/bulk_upload_excel', methods=['GET', 'POST'])
 @page_permission_required('bulk_upload')
 def bulk_upload_excel():
-    """رفع منتجات من Excel مع تحسين الأداء ومعالجة Timeout"""
+    """Excel Bulk Upload"""
     if request.method == 'POST':
         try:
-            # التحقق من وجود الملف
+            # Check if file exists
             if 'excel_file' not in request.files:
                 flash('لم يتم اختيار ملف!', 'error')
                 return redirect(url_for('bulk_upload_excel'))
             
             file = request.files['excel_file']
-            if not file or file.filename == '':
+            
+            if not file or not file.filename:
                 flash('يرجى اختيار ملف Excel!', 'error')
                 return redirect(url_for('bulk_upload_excel'))
             
-            # التحقق من نوع الملف
+            # Check file extension
             if not file.filename.lower().endswith(('.xlsx', '.xls')):
-                flash('يرجى رفع ملف Excel صحيح (.xlsx أو .xls)!', 'error')
+                flash('يرجى رفع ملف Excel بصيغة .xlsx أو .xls!', 'error')
                 return redirect(url_for('bulk_upload_excel'))
-
-            print(f"🔄 بدء معالجة الملف: {file.filename}")
             
-            # قراءة الملف مع تحديد نوع البيانات كـ string لتجنب مشاكل float
-            df = pd.read_excel(file, dtype=str)
-            print(f"📊 تم قراءة {len(df)} صف من الملف")
+            print(f"📁 Processing file: {file.filename}")
             
-            # التحقق من وجود الأعمدة المطلوبة
-            required_columns = ['Product Code', 'Brand Name', 'Product Type', 'Category',
-                              'Wholesale Price', 'Retail Price', 'Color Name', 'Stock']
-            missing_columns = [col for col in required_columns if col not in df.columns]
+            # ✅ Read Excel with openpyxl (instead of pandas)
+            import openpyxl
+            
+            wb = openpyxl.load_workbook(file, data_only=True)
+            sheet = wb.active
+            
+            # Get headers from first row
+            headers = [cell.value for cell in sheet[1] if cell.value]
+            
+            print(f"📊 Found {len(headers)} columns")
+            
+            # Check required columns
+            required_columns = [
+                'Product Code', 'Brand Name', 'Product Type', 'Category',
+                'Wholesale Price', 'Retail Price', 'Color Name', 'Stock'
+            ]
+            
+            missing_columns = [col for col in required_columns if col not in headers]
+            
             if missing_columns:
-                flash(f'أعمدة مفقودة في الملف: {", ".join(missing_columns)}', 'error')
+                flash(f'الأعمدة المطلوبة مفقودة: {", ".join(missing_columns)}', 'error')
                 return redirect(url_for('bulk_upload_excel'))
-
-            # تحديد حد أقصى للصفوف لتجنب timeout
+            
+            # Convert rows to list of dictionaries
+            excel_data = []
+            row_count = 0
+            
+            for row in sheet.iter_rows(min_row=2, values_only=True):
+                # Skip empty rows
+                if not any(row):
+                    continue
+                
+                row_dict = {}
+                for idx, header in enumerate(headers):
+                    if idx < len(row):
+                        value = row[idx]
+                        # Convert to string and handle None
+                        row_dict[header] = str(value).strip() if value is not None else ''
+                    else:
+                        row_dict[header] = ''
+                
+                excel_data.append(row_dict)
+                row_count += 1
+            
+            print(f"📝 Loaded {row_count} rows")
+            
+            # Limit rows to prevent timeout
             MAX_ROWS = 2000
-            if len(df) > MAX_ROWS:
-                flash(f'الملف كبير جداً! الحد الأقصى {MAX_ROWS} صف. ملفك يحتوي على {len(df)} صف.', 'warning')
-                df = df.head(MAX_ROWS)
-                flash(f'سيتم معالجة أول {MAX_ROWS} صف فقط.', 'info')
-
-            # تحويل البيانات لقاموس
-            excel_data = df.to_dict('records')
-            print(f"📦 بدء معالجة {len(excel_data)} منتج...")
-
-            # معالجة البيانات
+            if len(excel_data) > MAX_ROWS:
+                flash(f'⚠️ تحذير! الملف يحتوي على {len(excel_data)} صف. سيتم تحميل أول {MAX_ROWS} صف فقط.', 'warning')
+                excel_data = excel_data[:MAX_ROWS]
+                flash(f'تم تقليل البيانات إلى {MAX_ROWS} صف.', 'info')
+            
+            # Process the data
             result = db.bulk_add_products_from_excel_enhanced(excel_data)
-
+            
             if result['success']:
-                # إنشاء نسخة احتياطية فورية بعد النجاح
-                print("🔄 إنشاء نسخة احتياطية فورية بعد Bulk Upload...")
+                # Backup after successful upload
+                print("📦 Creating backup after bulk upload...")
                 import time
-                time.sleep(2)  # تأخير قصير لضمان اكتمال العمليات
+                time.sleep(2)
                 backup_success = backup_system.create_backup()
-                
                 if backup_success:
-                    print("✅ تم إنشاء النسخة الاحتياطية بنجاح")
+                    print("✅ Backup created successfully!")
                 else:
-                    print("⚠️ فشل في إنشاء النسخة الاحتياطية")
+                    print("❌ Backup failed!")
                 
-                # رسائل النجاح
-                success_msg = f'تم معالجة {result["success_count"]} صف بنجاح من أصل {len(excel_data)}!'
+                # Success message
+                success_msg = f"✅ تم رفع {result['success_count']} منتج من أصل {len(excel_data)} بنجاح!"
                 flash(success_msg, 'success')
                 
-                # معلومات البيانات الجديدة
+                # Show created items
                 if result['created_brands']:
-                    flash(f'تم إنشاء براندات جديدة: {", ".join(result["created_brands"])}', 'info')
+                    flash(f"تم إضافة الماركات: {', '.join(result['created_brands'])}", 'info')
+                
                 if result['created_colors']:
-                    flash(f'تم إنشاء ألوان جديدة: {", ".join(result["created_colors"])}', 'info')
+                    flash(f"تم إضافة الألوان: {', '.join(result['created_colors'])}", 'info')
+                
                 if result['created_types']:
-                    flash(f'تم إنشاء أنواع منتجات جديدة: {", ".join(result["created_types"])}', 'info')
-
-                # تحذيرات في حالة فشل بعض الصفوف
+                    flash(f"تم إضافة الأنواع: {', '.join(result['created_types'])}", 'info')
+                
+                # Show errors if any
                 if result['failed_count'] > 0:
-                    flash(f'{result["failed_count"]} صف فشل في المعالجة. راجع التفاصيل أدناه.', 'warning')
-                    
-                    # عرض أول 5 أخطاء فقط لتجنب ازدحام الرسائل
-                    for failed in result['failed_products'][:5]:
-                        flash(f'الصف {failed["row"]}: {failed["error"]}', 'error')
-                    
-                    if len(result['failed_products']) > 5:
-                        flash(f'و {len(result["failed_products"]) - 5} أخطاء أخرى...', 'warning')
-
+                    flash(f'⚠️ فشل رفع {result["failed_count"]} منتج. يرجى مراجعة الأخطاء أدناه.', 'warning')
+                
+                # Show first 5 errors
+                for failed in result['failed_products'][:5]:
+                    flash(f"❌ صف {failed['row']}: {failed['error']}", 'error')
+                
+                if len(result['failed_products']) > 5:
+                    flash(f"⚠️ و {len(result['failed_products']) - 5} أخطاء أخرى...", 'warning')
+                
                 return redirect(url_for('products_new'))
             
             else:
-                error_msg = result.get('error', 'خطأ غير معروف')
-                flash(f'فشل في معالجة الملف: {error_msg}', 'error')
-                print(f"❌ فشل في معالجة الملف: {error_msg}")
-
-        except pd.errors.EmptyDataError:
-            flash('الملف فارغ أو لا يحتوي على بيانات صالحة!', 'error')
-        except pd.errors.ParserError:
-            flash('خطأ في قراءة الملف! تأكد من أنه ملف Excel صحيح.', 'error')
-        except MemoryError:
-            flash('الملف كبير جداً ولا يمكن معالجته. جرب ملف أصغر.', 'error')
+                error_msg = result.get('error', 'حدث خطأ غير متوقع')
+                flash(f'❌ {error_msg}', 'error')
+                print(f"❌ Bulk upload error: {error_msg}")
+        
+        except openpyxl.utils.exceptions.InvalidFileException:
+            flash('❌ الملف تالف أو ليس ملف Excel صالح!', 'error')
+        
         except Exception as e:
             error_msg = str(e)
-            flash(f'خطأ في معالجة الملف: {error_msg}', 'error')
-            print(f"❌ خطأ عام في bulk upload: {error_msg}")
-
-    # عرض الصفحة
+            flash(f'❌ خطأ: {error_msg}', 'error')
+            print(f"❌ Exception in bulk upload: {error_msg}")
+    
     return render_template('bulk_upload_excel.html')
 
 @app.route('/export_products', methods=['GET', 'POST'])
