@@ -447,12 +447,16 @@ document.getElementById('printAllBtn')?.addEventListener('click', function() {
 
 // Print Labels Function
 function printLabels(variantIds, quantities) {
-    const modal = new bootstrap.Modal(document.getElementById('generatePdfModal'));
-    modal.show();
+    const pdfModalElement = document.getElementById('generatePdfModal');
+    const pdfModal = new bootstrap.Modal(pdfModalElement, {
+        backdrop: 'static',
+        keyboard: false
+    });
+    pdfModal.show();
     
     fetch('/barcode/print', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
             variant_ids: variantIds,
             quantities: quantities
@@ -460,26 +464,52 @@ function printLabels(variantIds, quantities) {
     })
     .then(response => response.json())
     .then(data => {
-        modal.hide();
-        
-        if (data.success) {
-            // Show PDF ready modal
-            document.getElementById('pdfSummary').textContent = 
-                `${data.total_labels} labels created for ${data.total_products} products`;
-            document.getElementById('downloadPdfBtn').href = data.pdf_url;
+        // ✅ Close modal using setTimeout to ensure it works
+        setTimeout(() => {
+            pdfModal.hide();
             
-            const readyModal = new bootstrap.Modal(document.getElementById('pdfReadyModal'));
-            readyModal.show();
+            // Force remove backdrop and modal classes
+            pdfModalElement.classList.remove('show');
+            pdfModalElement.style.display = 'none';
+            document.body.classList.remove('modal-open');
             
-            showToast('success', data.message);
-        } else {
-            showToast('error', data.error);
-        }
+            // Remove all backdrops
+            document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
+                backdrop.remove();
+            });
+            
+            if (data.success) {
+                // Show PDF ready modal
+                document.getElementById('pdfSummary').textContent = 
+                    `${data.total_labels} labels created for ${data.total_products} products`;
+                document.getElementById('downloadPdfBtn').href = data.pdf_url;
+                
+                const readyModal = new bootstrap.Modal(document.getElementById('pdfReadyModal'));
+                readyModal.show();
+                
+                showToast('success', data.message);
+            } else {
+                showToast('error', data.error);
+            }
+        }, 300);
     })
     .catch(error => {
         console.error('Error:', error);
-        modal.hide();
-        showToast('error', 'Failed to generate PDF');
+        
+        // ✅ Close modal on error
+        setTimeout(() => {
+            pdfModal.hide();
+            
+            pdfModalElement.classList.remove('show');
+            pdfModalElement.style.display = 'none';
+            document.body.classList.remove('modal-open');
+            
+            document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
+                backdrop.remove();
+            });
+            
+            showToast('error', 'Failed to generate PDF');
+        }, 300);
     });
 }
 

@@ -85,6 +85,13 @@
                                         </a>
                                     </li>
                                     <li class="nav-item">
+                                        <a class="nav-link {% if request.path == '/barcode/lookup' %}active{% endif %}" 
+                                        href="{{ url_for('barcode_lookup_page') }}">
+                                            <i class="fas fa-search"></i> Quick Lookup
+                                        </a>
+                                    </li>
+
+                                    <li class="nav-item">
                                         <a class="nav-link {% if request.endpoint == 'barcode_scanner' %}active{% endif %}" 
                                            href="{{ url_for('barcode_scanner') }}">
                                             <i class="fas fa-camera"></i> Scanner

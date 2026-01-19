@@ -1787,11 +1787,11 @@ def upload_color_image(variant_id):
 @app.route('/logs')
 @page_permission_required('activity_logs')
 def logs():
-    """صفحة Stock Activity Logs"""
+    """Stock Activity Logs"""
     # Get filters
-    operation_filter = request.args.get('operation', 'Bulk Update')  # Default: Stock Update
-    date_from = request.args.get('date_from', '')
-    date_to = request.args.get('date_to', '')
+    operation_filter = request.args.get('operation', '')
+    date_from = request.args.get('datefrom', '')
+    date_to = request.args.get('dateto', '')
     search_term = request.args.get('search', '')
     limit = int(request.args.get('limit', 100))
     
@@ -1807,25 +1807,28 @@ def logs():
     # Get statistics
     stats = db.get_logs_stats()
     
-    # Operation types for filter dropdown
+    # ✅ أضف كل الـ operation types المتاحة
     operation_types = [
         'All',
-        'Barcode Scan',
         'Stock Update',
-        'Bulk Update',
+        'Bulk Update', 
         'Product Added',
         'Product Deleted',
-        'Image Updated'
+        'Image Updated',
+        'Barcode Generated',           # ✅ جديد
+        'Barcode Labels Printed',      # ✅ جديد
+        'Barcode Scan - Add',          # ✅ جديد
+        'Barcode Scan - Remove'        # ✅ جديد
     ]
     
-    return render_template('logs.html',
-                         logs=logs,
-                         stats=stats,
-                         operation_types=operation_types,
-                         operation_filter=operation_filter,
-                         date_from=date_from,
-                         date_to=date_to,
-                         search_term=search_term)
+    return render_template('logs.html', 
+                          logs=logs, 
+                          stats=stats, 
+                          operation_types=operation_types,
+                          operation_filter=operation_filter,
+                          date_from=date_from,
+                          date_to=date_to,
+                          search_term=search_term)
 
 @app.route('/export_logs')
 @action_permission_required('activity_logs')
@@ -2199,30 +2202,41 @@ def view_barcode(variant_id):
 def barcode_scanner():
     """Barcode scanner page"""
     user_id = session.get('user_id', 0)
+    
+    # Get active session
     active_session_db = db.get_active_session(user_id)
     
     if active_session_db:
-        items_str = active_session_db[3] or '[]'
-        try:
-            items = json.loads(items_str) if isinstance(items_str, str) else []
-        except:
-            items = []
+        session_id = active_session_db[0]
         
-        # Pre-serialize items to avoid Jinja2 issues
+        # ✅ جيب الـ items مع كل التفاصيل!
+        items_with_details = db.get_session_items_with_details(session_id)
+        
+        # ✅ حوّل الـ image URLs
+        for item in items_with_details:
+            image_url = item.get('image_url')
+            if image_url:
+                if image_url.startswith('http://') or image_url.startswith('https://'):
+                    item['image_url'] = image_url  # خليها زي ما هي
+                else:
+                    item['image_url'] = f"/{image_url}"  # حط / قدام static paths
+        
         session_data = {
             'exists': True,
             'id': int(active_session_db[0]),
             'mode': str(active_session_db[2]),
-            'items_json': json.dumps(items),  # Already JSON string
-            'created_at': str(active_session_db[4] or '')
+            'items': items_with_details,  # ✅ بعت الـ items الكاملة
+            'itemsjson': json.dumps(items_with_details),  # ✅ JSON string للـ JavaScript
+            'createdat': str(active_session_db[4]) if len(active_session_db) > 4 else ''
         }
     else:
         session_data = {
             'exists': False,
             'id': 0,
             'mode': 'add',
-            'items_json': '[]',
-            'created_at': ''
+            'items': [],
+            'itemsjson': '[]',
+            'createdat': ''
         }
     
     return render_template('barcode_scanner.html', active_session=session_data)
@@ -2295,7 +2309,7 @@ def barcode_session_scan():
         
         session_id = active_session[0]
         
-        # Get variant by barcode number (NOT by variant_id!)
+        # Get variant by barcode number
         variant = db.get_variant_by_barcode(barcode)
         if not variant:
             return jsonify({'success': False, 'error': f'Product not found with barcode: {barcode}'})
@@ -2315,17 +2329,26 @@ def barcode_session_scan():
         result = db.add_item_to_session(session_id, variant_id)
         
         if result:
-            # Return full item data
+            # ✅ إصلاح الـ image URL - نتأكد لو بيبدأ بـ http مش نحط /
+            if image_url:
+                if image_url.startswith('http://') or image_url.startswith('https://'):
+                    final_image_url = image_url  # ✅ خليها زي ما هي
+                else:
+                    final_image_url = f"/{image_url}"  # ✅ حط / قدام static paths
+            else:
+                final_image_url = None
+            
+            # Return full item data - استخدم نفس الأسماء اللي في JavaScript!
             item_data = {
                 'variant_id': variant_id,
-                'product_code': product_code,
-                'brand_name': brand_name,
-                'product_type': product_type,
-                'color_name': color_name,
-                'color_code': color_code,
-                'stock_quantity': stock_quantity,
-                'image_url': f"{image_url}" if image_url else None,
-                'product_size': product_size,
+                'productcode': product_code,      # ✅ بدون underscore
+                'brandname': brand_name,          # ✅ بدون underscore
+                'producttype': product_type,      # ✅ بدون underscore
+                'colorname': color_name,          # ✅ بدون underscore
+                'colorcode': color_code,          # ✅ بدون underscore
+                'stockquantity': stock_quantity,  # ✅ بدون underscore
+                'imageurl': final_image_url,      # ✅ بدون underscore
+                'productsize': product_size,      # ✅ بدون underscore
                 'quantity': 1
             }
             
@@ -2347,54 +2370,55 @@ def barcode_session_scan():
 @app.route('/barcode/session/update', methods=['POST'])
 @action_permission_required('barcode_system')
 def update_session_item():
-    """Update quantity for an item in session"""
+    """Update quantity for an item in session OR update all items"""
     try:
         data = request.get_json()
-        variant_id = data.get('variant_id')
-        quantity = data.get('quantity', 1)
-        
-        if not variant_id:
-            return jsonify({
-                'success': False,
-                'error': 'Variant ID is required'
-            }), 400
-        
         user_id = session.get('user_id', 0)
-        active_session = db.get_active_session(user_id)
         
+        active_session = db.get_active_session(user_id)
         if not active_session:
-            return jsonify({
-                'success': False,
-                'error': 'No active session'
-            }), 400
+            return jsonify({'success': False, 'error': 'No active session'}, 400)
         
         session_id = active_session[0]
         items = json.loads(active_session[3]) if active_session[3] else []
         
-        # Find and update item
-        item = next((item for item in items if item['variant_id'] == variant_id), None)
-        
-        if not item:
-            return jsonify({
-                'success': False,
-                'error': 'Item not found in session'
-            }), 404
-        
-        # Update quantity
-        item['quantity'] = max(1, int(quantity))  # Minimum 1
+        # ✅ Check if updating all items or single item
+        if 'items' in data:
+            # Update all items at once (from quantity modal)
+            new_items = []
+            for item in data['items']:
+                new_items.append({
+                    'variant_id': item.get('variant_id'),
+                    'quantity': item.get('quantity', 1)
+                })
+            items = new_items
+            
+        elif 'variant_id' in data:
+            # Update single item quantity (original functionality)
+            variant_id = data.get('variant_id')
+            quantity = data.get('quantity', 1)
+            
+            if not variant_id:
+                return jsonify({'success': False, 'error': 'Variant ID is required'}, 400)
+            
+            # Find and update item
+            item = next((item for item in items if item['variant_id'] == variant_id), None)
+            if not item:
+                return jsonify({'success': False, 'error': 'Item not found in session'}, 404)
+            
+            item['quantity'] = max(1, int(quantity))  # Minimum 1
+        else:
+            return jsonify({'success': False, 'error': 'Invalid request'}, 400)
         
         # Update session
         success = db.update_session_items(session_id, json.dumps(items))
         
         if not success:
-            return jsonify({
-                'success': False,
-                'error': 'Failed to update session'
-            }), 500
+            return jsonify({'success': False, 'error': 'Failed to update session'}, 500)
         
         return jsonify({
             'success': True,
-            'message': 'Quantity updated',
+            'message': 'Session updated',
             'session': {
                 'total_items': len(items),
                 'total_quantity': sum(item['quantity'] for item in items)
@@ -2403,10 +2427,7 @@ def update_session_item():
         
     except Exception as e:
         print(f"❌ Error updating item: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return jsonify({'success': False, 'error': str(e)}, 500)
 
 
 @app.route('/barcode/session/remove', methods=['POST'])
@@ -2519,73 +2540,122 @@ def confirm_session():
         
         # Get session items with full details
         items = db.get_session_items_with_details(session_id)
-        
         if not items:
             return jsonify({'success': False, 'error': 'Session is empty'})
         
-        # Update stock for each item
+        # Prepare stock updates list
+        stock_updates = []
+        
+        # Get connection
         conn = db.get_connection()
         cursor = conn.cursor()
-        updated_count = 0
         
-        for item in items:
-            variant_id = item['variant_id']
-            quantity = item['quantity']
+        try:
+            # Step 1: Get all details BEFORE updating
+            for item in items:
+                variant_id = item['variant_id']
+                quantity = item['quantity']
+                
+                try:
+                    # Get current details from database
+                    cursor.execute("""
+                        SELECT pv.current_stock, bp.id, bp.product_code, 
+                               br.brand_name, pt.type_name, c.color_name, ci.image_url
+                        FROM product_variants pv
+                        JOIN base_products bp ON pv.base_product_id = bp.id
+                        JOIN brands br ON bp.brand_id = br.id
+                        JOIN product_types pt ON bp.product_type_id = pt.id
+                        JOIN colors c ON pv.color_id = c.id
+                        LEFT JOIN color_images ci ON pv.id = ci.variant_id
+                        WHERE pv.id = ?
+                    """, (variant_id,))
+                    
+                    result = cursor.fetchone()
+                    
+                    if result:
+                        old_stock = result[0]
+                        
+                        # Calculate new stock
+                        if session_mode == 'add':
+                            new_stock = old_stock + quantity
+                        else:  # remove
+                            new_stock = max(0, old_stock - quantity)
+                        
+                        # Only add to updates if stock actually changed
+                        if old_stock != new_stock:
+                            stock_updates.append({
+                                'variant_id': variant_id,
+                                'product_id': result[1],
+                                'product_code': result[2],
+                                'brand_name': result[3],
+                                'product_type': result[4],
+                                'color_name': result[5],
+                                'image_url': result[6] or '',
+                                'old_stock': old_stock,
+                                'new_stock': new_stock,
+                                'quantity': quantity,
+                                'skip_log': False
+                            })
+                        else:
+                            stock_updates.append({'skip_log': True})
+                    
+                except Exception as e:
+                    print(f"❌ Error getting details for variant {variant_id}: {e}")
+                    stock_updates.append({'skip_log': True})
             
-            # Get current stock
-            cursor.execute('SELECT current_stock FROM product_variants WHERE id = ?', (variant_id,))
-            result = cursor.fetchone()
-            if not result:
-                continue
+            # Step 2: Update stock for all items
+            for update in stock_updates:
+                if not update.get('skip_log', False):
+                    cursor.execute("""
+                        UPDATE product_variants 
+                        SET current_stock = ? 
+                        WHERE id = ?
+                    """, (update['new_stock'], update['variant_id']))
             
-            old_stock = result[0]
+            # Commit all updates
+            conn.commit()
+            conn.close()
             
-            # Calculate new stock
-            if session_mode == 'add':
-                new_stock = old_stock + quantity
-            else:  # remove
-                new_stock = max(0, old_stock - quantity)
+            # Step 3: Log successful updates (after commit)
+            logged_count = 0
+            for update in stock_updates:
+                if not update.get('skip_log', False) and 'old_stock' in update:
+                    db.add_stock_log(
+                        operation_type=f'Barcode Scan - {session_mode.title()}',
+                        product_id=update['product_id'],
+                        variant_id=update['variant_id'],
+                        product_code=update['product_code'],
+                        brand_name=update['brand_name'],
+                        product_type=update['product_type'],
+                        color_name=update['color_name'],
+                        image_url=update['image_url'],
+                        old_value=update['old_stock'],
+                        new_value=update['new_stock'],
+                        username=session.get('full_name', 'User'),
+                        notes=f"Stock {'increased' if session_mode == 'add' else 'decreased'} by {update['quantity']} units via barcode scanner",
+                        source_page='Barcode Scanner',
+                        source_url=request.url
+                    )
+                    logged_count += 1
             
-            # Update stock
-            cursor.execute('UPDATE product_variants SET current_stock = ? WHERE id = ?', 
-                          (new_stock, variant_id))
+            # Close session
+            db.close_session(session_id, 'confirmed')
             
-            # Log the operation
-            db.add_stock_log(
-                operation_type=f"Barcode Scan - {session_mode.title()}",
-                product_id=None,
-                variant_id=variant_id,
-                product_code=item['product_code'],
-                brand_name=item['brand_name'],
-                product_type=item['product_type'],
-                color_name=item['color_name'],
-                image_url=item['image_url'],
-                old_value=old_stock,
-                new_value=new_stock,
-                username=session.get('full_name', 'User'),
-                notes=f"Barcode scan: {quantity} items {'added' if session_mode == 'add' else 'removed'}",
-                source_page='Barcode Scanner',
-                source_url=request.url
-            )
+            return jsonify({
+                'success': True, 
+                'updated_count': logged_count,
+                'message': f'Stock updated for {logged_count} items'
+            })
             
-            updated_count += 1
-        
-        conn.commit()
-        conn.close()
-        
-        # Close session
-        db.close_session(session_id, 'confirmed')
-        
-        return jsonify({
-            'success': True,
-            'updated_count': updated_count,
-            'message': f'Stock updated for {updated_count} items'
-        })
-        
+        except Exception as e:
+            conn.rollback()
+            conn.close()
+            return jsonify({'success': False, 'error': f'Failed to update stock: {str(e)}'})
+    
     except Exception as e:
         print(f"❌ Error confirming session: {e}")
-        if 'conn' in locals():
-            conn.close()
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})
 
 
@@ -2754,24 +2824,64 @@ def print_barcodes():
                 'error': 'Failed to generate PDF'
             }), 500
         
-        # Log the operation
+        # Log each product separately with full details
+        logged_count = 0
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            for variant_id in variant_ids:
+                quantity = quantities.get(str(variant_id), 1)
+                
+                try:
+                    # Get full product details from database
+                    cursor.execute("""
+                        SELECT bp.id, bp.product_code, br.brand_name, 
+                               pt.type_name, c.color_name, pv.current_stock, ci.image_url
+                        FROM product_variants pv
+                        JOIN base_products bp ON pv.base_product_id = bp.id
+                        JOIN brands br ON bp.brand_id = br.id
+                        JOIN product_types pt ON bp.product_type_id = pt.id
+                        JOIN colors c ON pv.color_id = c.id
+                        LEFT JOIN color_images ci ON pv.id = ci.variant_id
+                        WHERE pv.id = ?
+                    """, (variant_id,))
+                    
+                    result = cursor.fetchone()
+                    
+                    if result:
+                        db.add_stock_log(
+                            operation_type='Barcode Labels Printed',
+                            product_id=result[0],
+                            variant_id=variant_id,
+                            product_code=result[1],
+                            brand_name=result[2],
+                            product_type=result[3],
+                            color_name=result[4],
+                            image_url=result[6] or '',
+                            old_value=result[5],
+                            new_value=result[5],
+                            username=session.get('full_name', 'User'),
+                            notes=f'Printed {quantity} barcode label{"s" if quantity > 1 else ""}',
+                            source_page='Barcode Printing',
+                            source_url=request.url
+                        )
+                        logged_count += 1
+                
+                except Exception as e:
+                    print(f"❌ Error logging barcode print for variant {variant_id}: {e}")
+                    continue
+            
+            conn.close()
+            print(f"✅ Logged {logged_count} barcode print operations")
+            
+        except Exception as e:
+            print(f"❌ Error in barcode print logging: {e}")
+            if conn:
+                conn.close()
+        
+        # Calculate total labels (بعد الـ Logging)
         total_labels = sum(item['quantity'] for item in labels_data)
-        db.add_stock_log(
-            operation_type='Barcode Labels Printed',
-            product_id=None,
-            variant_id=None,
-            product_code='',
-            brand_name='',
-            product_type='',
-            color_name='',
-            image_url='',
-            old_value=None,
-            new_value=None,
-            username=session.get('full_name', 'User'),
-            notes=f'Printed {total_labels} labels for {len(labels_data)} products',
-            source_page='Barcode Printing',
-            source_url=request.url
-        )
         
         return jsonify({
             'success': True,
@@ -2780,6 +2890,7 @@ def print_barcodes():
             'total_products': len(labels_data),
             'message': f'PDF generated with {total_labels} labels'
         })
+
         
     except Exception as e:
         print(f"❌ Error printing barcodes: {e}")
@@ -2791,19 +2902,32 @@ def print_barcodes():
 
 # === Barcode Lookup API ===
 
+@app.route('/barcode/lookup')
+@login_required
+def barcode_lookup_page():
+    """Barcode Lookup Page - Quick scan without stock changes"""
+    return render_template('barcode_lookup.html')
+
+# الـ API موجود أصلاً - بس نتأكد إنه شغال
 @app.route('/api/barcode/lookup/<barcode>')
 @login_required
 def barcode_lookup(barcode):
     """Quick barcode lookup API"""
     try:
-        # Lookup barcode
         barcode_data = db.get_barcode_by_number(barcode)
         
         if not barcode_data:
-            return jsonify({
-                'success': False,
-                'error': 'Barcode not found'
-            }), 404
+            return jsonify({'success': False, 'error': 'Barcode not found'})
+        
+        # Fix image URL
+        image_url = barcode_data[10] or None
+        if image_url:
+            if image_url.startswith('http://') or image_url.startswith('https://'):
+                final_image_url = image_url
+            else:
+                final_image_url = f"/{image_url}"
+        else:
+            final_image_url = None
         
         return jsonify({
             'success': True,
@@ -2818,15 +2942,12 @@ def barcode_lookup(barcode):
             'wholesale_price': barcode_data[11],
             'retail_price': barcode_data[12],
             'product_size': barcode_data[13],
-            'image_url': barcode_data[10] or None
+            'image_url': final_image_url
         })
         
     except Exception as e:
         print(f"❌ Error looking up barcode: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return jsonify({'success': False, 'error': str(e)})
 
 
 # === Cleanup Task (Optional - run periodically) ===

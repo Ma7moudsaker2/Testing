@@ -149,7 +149,7 @@ class BarcodeGenerator:
                 'module_height': 15.0,
                 'quiet_zone': 6.5,
                 'text_distance': 5.0,
-                'font_size': 10,
+                'font_size': 30,
                 'write_text': True,
             })
             
@@ -170,21 +170,16 @@ class BarcodeGenerator:
             return None
     
     def _add_labels_to_image(self, image_path, product_code, color_name):
-        """
-        Add product code and color name labels to barcode image
-        
-        Args:
-            image_path: Path to barcode image
-            product_code: Product code
-            color_name: Color name
-        """
+        """Add product code and color name labels to barcode image"""
         try:
             # Open existing barcode image
             img = Image.open(image_path)
             width, height = img.size
             
+            # ✅ زوّد المساحة للنصوص - كانت 60px
+            new_height = height + 120  # ← زودها من 60 لـ 120
+            
             # Create new image with extra space for labels
-            new_height = height + 60  # Add 60px for labels
             new_img = Image.new('RGB', (width, new_height), 'white')
             
             # Paste original barcode
@@ -195,28 +190,40 @@ class BarcodeGenerator:
             
             # Try to load a font (fallback to default if not available)
             try:
-                font = ImageFont.truetype("arial.ttf", 14)
+                # ✅ كبّر الخط - كان 14
+                font_large = ImageFont.truetype("arial.ttf", 32)      # ← للكود
+                font_medium = ImageFont.truetype("arial.ttf", 28)     # ← للون
             except:
-                font = ImageFont.load_default()
+                font_large = ImageFont.load_default()
+                font_medium = ImageFont.load_default()
             
-            # Draw product code
+            # ✅ Draw product code (أكبر وأوضح)
             text1 = f"{product_code}"
-            bbox1 = draw.textbbox((0, 0), text1, font=font)
+            bbox1 = draw.textbbox((0, 0), text1, font=font_large)
             text1_width = bbox1[2] - bbox1[0]
-            draw.text(((width - text1_width) / 2, height + 5), text1, fill='black', font=font)
+            draw.text(
+                ((width - text1_width) / 2, height + 15),  # ← كانت height + 5
+                text1, 
+                fill='black', 
+                font=font_large
+            )
             
-            # Draw color name
+            # ✅ Draw color name (أكبر وأوضح)
             text2 = f"{color_name}"
-            bbox2 = draw.textbbox((0, 0), text2, font=font)
+            bbox2 = draw.textbbox((0, 0), text2, font=font_medium)
             text2_width = bbox2[2] - bbox2[0]
-            draw.text(((width - text2_width) / 2, height + 30), text2, fill='black', font=font)
+            draw.text(
+                ((width - text2_width) / 2, height + 70),  # ← كانت height + 30
+                text2, 
+                fill='black', 
+                font=font_medium
+            )
             
             # Save updated image
             new_img.save(image_path)
             
         except Exception as e:
             print(f"⚠️ Could not add labels to image: {e}")
-            # Not critical - barcode is still usable
     
     def generate_complete_barcode(self, product_code, color_name, variant_id=None):
         """
@@ -318,7 +325,7 @@ class BarcodePrinter:
     
     def _draw_label(self, canvas_obj, label_data):
         """
-        Draw a single label on canvas
+        Draw a single label on canvas - BARCODE IMAGE ONLY (LARGE)
         
         Args:
             canvas_obj: ReportLab canvas object
@@ -339,35 +346,27 @@ class BarcodePrinter:
                 try:
                     img = ImageReader(barcode_image)
                     
-                    # Calculate image dimensions (maintain aspect ratio)
-                    img_width = width * 0.9  # 90% of page width
-                    img_height = height * 0.5  # 50% of page height
+                    # ✅ Make image LARGE - takes up almost entire label
+                    img_width = width * 0.95   # 95% of page width
+                    img_height = height * 0.95  # 95% of page height
                     
-                    # Center horizontally
+                    # Center the image
                     x = (width - img_width) / 2
-                    y = height * 0.35  # Position in upper half
+                    y = (height - img_height) / 2
                     
-                    canvas_obj.drawImage(img, x, y, width=img_width, height=img_height, preserveAspectRatio=True)
+                    canvas_obj.drawImage(
+                        img, 
+                        x, y, 
+                        width=img_width, 
+                        height=img_height, 
+                        preserveAspectRatio=True
+                    )
                     
                 except Exception as e:
                     print(f"⚠️ Could not draw barcode image: {e}")
             
-            # Draw text labels
-            canvas_obj.setFont("Helvetica-Bold", 8)
-            
-            # Product code
-            text_width = canvas_obj.stringWidth(product_code, "Helvetica-Bold", 8)
-            canvas_obj.drawString((width - text_width) / 2, height * 0.25, product_code)
-            
-            # Color name
-            canvas_obj.setFont("Helvetica", 7)
-            text_width = canvas_obj.stringWidth(color_name, "Helvetica", 7)
-            canvas_obj.drawString((width - text_width) / 2, height * 0.15, color_name)
-            
-            # Barcode number
-            canvas_obj.setFont("Helvetica", 6)
-            text_width = canvas_obj.stringWidth(barcode_number, "Helvetica", 6)
-            canvas_obj.drawString((width - text_width) / 2, height * 0.05, barcode_number)
+            # ❌ NO TEXT - Just the barcode image!
+            # All text labels removed to avoid duplication
             
         except Exception as e:
             print(f"❌ Error drawing label: {e}")

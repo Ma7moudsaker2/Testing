@@ -982,7 +982,8 @@ class StockDatabase:
         
         # إضافة فئات التجار
         categories = [('L', 'Category L', 'Trader Category L'), 
-                     ('F', 'Category F', 'Trader Category F')]
+                     ('F', 'Category F', 'Trader Category F')
+                     ('ISQ', 'Category isouq', 'Trader Category isouq')]
         for cat in categories:
             cursor.execute('INSERT OR IGNORE INTO trader_categories (category_code, category_name, description) VALUES (?, ?, ?)', cat)
         
@@ -2634,28 +2635,31 @@ class StockDatabase:
             conn = self.get_connection()
             cursor = conn.cursor()
             
-            cursor.execute('''
-            SELECT 
-                b.*,
-                pv.current_stock,
-                bp.product_code,
-                br.brand_name,
-                pt.type_name,
-                c.color_name,
-                c.color_code,
-                ci.image_url,
-                bp.wholesale_price,
-                bp.retail_price,
-                bp.product_size
-            FROM barcodes b
-            JOIN product_variants pv ON b.variant_id = pv.id
-            JOIN base_products bp ON pv.base_product_id = bp.id
-            JOIN brands br ON bp.brand_id = br.id
-            JOIN product_types pt ON bp.product_type_id = pt.id
-            JOIN colors c ON pv.color_id = c.id
-            LEFT JOIN color_images ci ON pv.id = ci.variant_id
-            WHERE b.barcode_number = ?
-            ''', (barcode_number,))
+            cursor.execute("""
+                SELECT 
+                    b.id,                    -- 0: barcode_id
+                    b.variant_id,            -- 1: variant_id
+                    b.barcode_number,        -- 2: barcode_number
+                    b.image_path,             -- 3: barcode_image_path
+                    pv.current_stock,        -- 4: current_stock
+                    bp.product_code,         -- 5: product_code
+                    br.brand_name,           -- 6: brand_name
+                    pt.type_name,            -- 7: product_type
+                    c.color_name,            -- 8: color_name
+                    c.color_code,            -- 9: color_code
+                    ci.image_url,            -- 10: product_image_url
+                    bp.wholesale_price,      -- 11: wholesale_price
+                    bp.retail_price,         -- 12: retail_price
+                    bp.product_size          -- 13: product_size
+                FROM barcodes b
+                JOIN product_variants pv ON b.variant_id = pv.id
+                JOIN base_products bp ON pv.base_product_id = bp.id
+                JOIN brands br ON bp.brand_id = br.id
+                JOIN product_types pt ON bp.product_type_id = pt.id
+                JOIN colors c ON pv.color_id = c.id
+                LEFT JOIN color_images ci ON pv.id = ci.variant_id
+                WHERE b.barcode_number = ?
+            """, (barcode_number,))
             
             result = cursor.fetchone()
             conn.close()
@@ -3139,7 +3143,7 @@ class StockDatabase:
                 variant_id = item.get('variant_id')
                 quantity = item.get('quantity', 1)
                 
-                # Get variant details
+                # Get variant details - شيلنا ci.is_primary
                 cursor.execute('''
                 SELECT pv.id, bp.product_code, br.brand_name, pt.type_name,
                     c.color_name, pv.current_stock, ci.image_url
@@ -3150,6 +3154,7 @@ class StockDatabase:
                 JOIN colors c ON pv.color_id = c.id
                 LEFT JOIN color_images ci ON pv.id = ci.variant_id
                 WHERE pv.id = ?
+                LIMIT 1
                 ''', (variant_id,))
                 
                 variant_data = cursor.fetchone()

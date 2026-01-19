@@ -111,7 +111,8 @@
                             <th>Code</th>
                             <th>Brand</th>
                             <th>Color</th>
-                            <th style="width: 100px;">Qty</th>
+                            <th style="width: 100px;">Current Stock</th>
+                            <th style="width: 180px;">Quantity</th>
                             <th style="width: 80px;">Actions</th>
                         </tr>
                     </thead>
@@ -192,6 +193,7 @@
     </div>
 </div>
 
+
 <!-- Cancel Modal -->
 <div class="modal fade" id="cancelModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
@@ -224,24 +226,27 @@
 <script>
 // Session data from server (Safe parsing)
 {% if active_session and active_session.exists %}
-let sessionActive = true;
-let sessionMode = '{{ active_session.mode }}';
-// Items already parsed in Python, just output as JSON
-let sessionItems = {{ active_session.items_json | safe }};
-let html5QrCode = null;
-
-console.log('🔍 Session Active:', sessionActive);
-console.log('🔍 Session Mode:', sessionMode);
-console.log('🔍 Session Items:', sessionItems);
-console.log('🔍 Items type:', typeof sessionItems);
+    let sessionActive = true;
+    let sessionMode = '{{ active_session.mode }}';
+    
+    // ✅ Parse items with full details from server
+    let sessionItems = [];
+    try {
+        sessionItems = {{ active_session.itemsjson|safe }};
+        console.log('✅ Loaded session items:', sessionItems);
+    } catch(e) {
+        console.error('❌ Error loading items:', e);
+        sessionItems = [];
+    }
+    
+    let html5QrCode = null;
 {% else %}
-let sessionActive = false;
-let sessionMode = 'add';
-let sessionItems = [];
-let html5QrCode = null;
-
-console.log('🔍 No active session');
+    let sessionActive = false;
+    let sessionMode = 'add';
+    let sessionItems = [];
+    let html5QrCode = null;
 {% endif %}
+
 
 // Initialize page
 document.addEventListener('DOMContentLoaded', function() {
@@ -348,6 +353,11 @@ document.getElementById('barcodeInput')?.addEventListener('keypress', function(e
 });
 
 // Process Scan
+// Global variable to store pending scan
+let pendingScanData = null;
+
+// Process Scan
+// Process Scan
 function processScan(barcode) {
     if (!sessionActive) {
         showToast('error', 'Please start a session first');
@@ -364,22 +374,31 @@ function processScan(barcode) {
     .then(data => {
         if (data.success) {
             playSound('success');
-            showToast('success', data.message);
+            showToast('success', `✅ ${data.item.productcode} - ${data.item.colorname}`);
             
-            // Update session items
-            const existingIndex = sessionItems.findIndex(item => item.variant_id === data.item.variant_id);
+            // Add to session items
+            const variantId = data.item.variant_id;
+            const existingIndex = sessionItems.findIndex(item => item.variant_id === variantId);
             
             if (existingIndex >= 0) {
-                // Item exists - increment quantity
-                sessionItems[existingIndex].quantity = (sessionItems[existingIndex].quantity || 1) + 1;
+                // Item exists - increase quantity by 1
+                sessionItems[existingIndex].quantity += 1;
             } else {
-                // New item - add to list
-                sessionItems.push(data.item);
+                // New item - add with quantity 1
+                sessionItems.push({
+                    variant_id: data.item.variant_id,
+                    product_code: data.item.productcode,
+                    brand_name: data.item.brandname,
+                    color_name: data.item.colorname,
+                    current_stock: data.item.stockquantity,
+                    image_url: data.item.imageurl,
+                    quantity: 1
+                });
             }
             
             // Update UI
             loadSessionItems();
-            addActivity(data.message, 'success');
+            addActivity(`Added ${data.item.productcode} - ${data.item.colorname}`, 'success');
             
             // Clear input
             document.getElementById('barcodeInput').value = '';
@@ -397,6 +416,102 @@ function processScan(barcode) {
     });
 }
 
+// Set quick quantity
+function setQuickQuantity(qty) {
+    document.getElementById('quantityInput').value = qty;
+}
+
+// Confirm quantity and add to session
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('confirmQuantityBtn')?.addEventListener('click', function() {
+        if (!pendingScanData) return;
+        
+        const quantity = parseInt(document.getElementById('quantityInput').value) || 1;
+        
+        if (quantity < 1) {
+            showToast('error', 'Quantity must be at least 1');
+            return;
+        }
+        
+        // Close modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('quantityModal'));
+        modal.hide();
+        
+        // Add to session with quantity
+        addItemToSession(pendingScanData, quantity);
+        
+        // Clear pending data
+        pendingScanData = null;
+    });
+    
+    // Enter key on quantity input
+    document.getElementById('quantityInput')?.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            document.getElementById('confirmQuantityBtn').click();
+        }
+    });
+});
+
+// Add item to session with quantity
+function addItemToSession(data, quantity) {
+    playSound('success');
+    showToast('success', `✅ Added ${quantity}x ${data.item.productcode}`);
+    
+    // Update session items
+    const variantId = data.item.variant_id;
+    const existingIndex = sessionItems.findIndex(item => item.variant_id === variantId);
+    
+    if (existingIndex >= 0) {
+        // Item exists - add quantity
+        sessionItems[existingIndex].quantity += quantity;
+    } else {
+        // New item - add with quantity
+        sessionItems.push({
+            variant_id: data.item.variant_id,
+            product_code: data.item.productcode,
+            brand_name: data.item.brandname,
+            color_name: data.item.colorname,
+            current_stock: data.item.stockquantity,  // ✅ حفظ الاستوك الحالي
+            image_url: data.item.imageurl,
+            quantity: quantity
+        });
+    }
+    
+    // Update session in DB
+    updateSessionInDB();
+    
+    // Update UI
+    loadSessionItems();
+    addActivity(`Added ${quantity}x ${data.item.productcode} - ${data.item.colorname}`, 'success');
+    
+    // Clear input
+    document.getElementById('barcodeInput').value = '';
+    document.getElementById('barcodeInput').focus();
+}
+
+// Update session in database
+// Update session in database
+function updateSessionInDB() {
+    // Convert to simple format (only variant_id + quantity)
+    const simpleItems = sessionItems.map(item => ({
+        variant_id: item.variant_id,
+        quantity: item.quantity
+    }));
+    
+    fetch('/barcode/session/update', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({items: simpleItems})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data.success) {
+            console.error('Failed to update session:', data.error);
+        }
+    })
+    .catch(error => console.error('Error updating session:', error));
+}
+
 // Load Session Items
 function loadSessionItems() {
     const tbody = document.getElementById('itemsTableBody');
@@ -410,8 +525,7 @@ function loadSessionItems() {
     document.getElementById('itemsSection').classList.remove('d-none');
     
     sessionItems.forEach((item, index) => {
-        // Get image URL or use placeholder
-        const imageUrl = item.image_url || 'https://via.placeholder.com/100x100/f0f0f0/999999?text=No+Image';
+        let imageUrl = item.image_url || 'https://via.placeholder.com/100x100/f0f0f0/999999?text=No+Image';
         
         const row = document.createElement('tr');
         row.innerHTML = `
@@ -425,10 +539,27 @@ function loadSessionItems() {
             <td><strong>${item.product_code || 'N/A'}</strong></td>
             <td>${item.brand_name || 'N/A'}</td>
             <td>${item.color_name || 'N/A'}</td>
-            <td><span class="badge bg-secondary">${item.quantity || 1}</span></td>
             <td>
-                <button class="btn btn-sm btn-danger" 
-                        onclick="removeItem(${item.variant_id})">
+                <span class="badge bg-info">${item.current_stock || 0}</span>
+            </td>
+            <td>
+                <div class="input-group input-group-sm" style="max-width: 150px;">
+                    <button class="btn btn-outline-secondary" onclick="changeQuantity(${item.variant_id}, -1)">
+                        <i class="fas fa-minus"></i>
+                    </button>
+                    <input type="number" 
+                           class="form-control text-center" 
+                           value="${item.quantity || 1}" 
+                           min="1"
+                           onchange="updateQuantity(${item.variant_id}, this.value)"
+                           style="font-weight: bold;">
+                    <button class="btn btn-outline-secondary" onclick="changeQuantity(${item.variant_id}, 1)">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+            </td>
+            <td>
+                <button class="btn btn-sm btn-danger" onclick="removeItem(${item.variant_id})">
                     <i class="fas fa-trash"></i>
                 </button>
             </td>
@@ -437,6 +568,25 @@ function loadSessionItems() {
     });
     
     updateSummary();
+}
+
+// Change quantity (+/-)
+function changeQuantity(variantId, change) {
+    const item = sessionItems.find(item => item.variant_id === variantId);
+    if (item) {
+        item.quantity = Math.max(1, item.quantity + change);
+        loadSessionItems();
+    }
+}
+
+// Update quantity manually
+function updateQuantity(variantId, newValue) {
+    const item = sessionItems.find(item => item.variant_id === variantId);
+    if (item) {
+        const qty = parseInt(newValue) || 1;
+        item.quantity = Math.max(1, qty);
+        loadSessionItems();
+    }
 }
 
 // Remove Item
@@ -488,43 +638,74 @@ document.getElementById('clearBtn')?.addEventListener('click', function() {
     });
 });
 
-// Confirm Session
-document.getElementById('confirmBtn')?.addEventListener('click', function() {
-    if (sessionItems.length === 0) {
-        showToast('warning', 'Session is empty');
-        return;
-    }
-    
-    document.getElementById('confirmMode').textContent = sessionMode.toUpperCase();
-    document.getElementById('confirmItems').textContent = sessionItems.length;
-    document.getElementById('confirmQuantity').textContent = sessionItems.reduce((sum, item) => sum + item.quantity, 0);
-    
-    const modal = new bootstrap.Modal(document.getElementById('confirmModal'));
-    modal.show();
-});
-
-document.getElementById('confirmYesBtn')?.addEventListener('click', function() {
-    const modal = bootstrap.Modal.getInstance(document.getElementById('confirmModal'));
-    modal.hide();
-    
-    fetch('/barcode/session/confirm', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('success', data.message);
-            setTimeout(() => location.reload(), 2000);
-        } else {
-            showToast('error', data.error);
+    // Confirm Session
+    document.getElementById('confirmBtn')?.addEventListener('click', function() {
+        if (sessionItems.length === 0) {
+            showToast('warning', 'Session is empty');
+            return;
         }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        showToast('error', 'Failed to confirm session');
+        
+        document.getElementById('confirmMode').textContent = sessionMode.toUpperCase();
+        document.getElementById('confirmItems').textContent = sessionItems.length;
+        document.getElementById('confirmQuantity').textContent = sessionItems.reduce((sum, item) => sum + item.quantity, 0);
+        
+        const modal = new bootstrap.Modal(document.getElementById('confirmModal'));
+        modal.show();
     });
-});
+
+    document.getElementById('confirmYesBtn')?.addEventListener('click', function() {
+        const modal = bootstrap.Modal.getInstance(document.getElementById('confirmModal'));
+        if (modal) modal.hide();
+        
+        console.log('✅ Confirm button clicked');
+        
+        // Step 1: Save quantities first
+        const simpleItems = sessionItems.map(item => ({
+            variant_id: item.variant_id,
+            quantity: item.quantity
+        }));
+        
+        console.log('Saving items:', simpleItems);
+        
+        fetch('/barcode/session/update', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({items: simpleItems})
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Update response:', data);
+            
+            if (!data.success) {
+                throw new Error(data.error || 'Failed to update session');
+            }
+            
+            // Step 2: Confirm session (update stock)
+            console.log('Confirming session...');
+            return fetch('/barcode/session/confirm', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'}
+            });
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Confirm response:', data);
+            
+            if (data.success) {
+                playSound('success');
+                showToast('success', `✅ ${data.message} - Updated ${data.updated_count} items`);
+                setTimeout(() => location.reload(), 2000);
+            } else {
+                playSound('error');
+                showToast('error', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('❌ Error:', error);
+            playSound('error');
+            showToast('error', error.message || 'Failed to confirm session');
+        });
+    });
 
 // Cancel Session
 document.getElementById('cancelBtn')?.addEventListener('click', function() {
