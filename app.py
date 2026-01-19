@@ -6,7 +6,6 @@ from functools import wraps
 from datetime import datetime
 import json
 from database import StockDatabase
-import pandas as pd
 from io import BytesIO
 from dropbox_oauth_backup import DropboxOAuthBackup
 # أضف هذا مع الـ imports في الأعلى
