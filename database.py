@@ -982,8 +982,7 @@ class StockDatabase:
         
         # إضافة فئات التجار
         categories = [('L', 'Category L', 'Trader Category L'), 
-                     ('F', 'Category F', 'Trader Category F')
-                     ('ISQ', 'Category isouq', 'Trader Category isouq')]
+                     ('F', 'Category F', 'Trader Category F')]
         for cat in categories:
             cursor.execute('INSERT OR IGNORE INTO trader_categories (category_code, category_name, description) VALUES (?, ?, ?)', cat)
         
