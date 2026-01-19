@@ -86,7 +86,7 @@
                 <label class="form-label"><strong>Or Enter Manually / USB Scanner:</strong></label>
                 <div class="input-group input-group-lg">
                     <input type="text" class="form-control" id="barcodeInput" 
-                           placeholder="Type or scan barcode here..." autofocus>
+                           placeholder="Type or scan barcode here...">
                     <button class="btn btn-success" id="scanBtn">
                         <i class="fas fa-search"></i> Scan
                     </button>
@@ -106,14 +106,14 @@
                 <table class="table table-hover" id="itemsTable">
                     <thead>
                         <tr>
-                            <th style="width: 50px;">#</th>
-                            <th style="width: 80px;">Image</th>
+                            <th style="width: 50px">#</th>
+                            <th style="width: 80px">Image</th>
                             <th>Code</th>
                             <th>Brand</th>
+                            <th style="width: 120px">Quantity</th>  <!-- ✅ اتحركت هنا -->
                             <th>Color</th>
-                            <th style="width: 100px;">Current Stock</th>
-                            <th style="width: 180px;">Quantity</th>
-                            <th style="width: 80px;">Actions</th>
+                            <th style="width: 100px">Stock</th>
+                            <th style="width: 80px">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="itemsTableBody">
@@ -418,7 +418,10 @@ function processScan(barcode) {
             
             // Clear input
             document.getElementById('barcodeInput').value = '';
-            document.getElementById('barcodeInput').focus();
+            // Only focus on desktop (not mobile)
+            if (!/Mobile|Android|iPhone|iPad/i.test(navigator.userAgent)) {
+                document.getElementById('barcodeInput').focus();
+            }
         } else {
             playSound('error');
             showToast('error', data.error);
@@ -502,7 +505,10 @@ function addItemToSession(data, quantity) {
     
     // Clear input
     document.getElementById('barcodeInput').value = '';
-    document.getElementById('barcodeInput').focus();
+    // Only focus on desktop (not mobile)
+    if (!/Mobile|Android|iPhone|iPad/i.test(navigator.userAgent)) {
+        document.getElementById('barcodeInput').focus();
+    }
 }
 
 // Update session in database

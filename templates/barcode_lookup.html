@@ -258,36 +258,43 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Camera scanner
-    document.getElementById('startCameraBtn').addEventListener('click', function() {
+// Camera scanner
+document.getElementById('startCameraBtn').addEventListener('click', async function() {
+    try {
+        // ✅ Request camera permission first
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: "environment" } 
+        });
+        
+        // Stop the stream (we just needed permission)
+        stream.getTracks().forEach(track => track.stop());
+        
+        // Now start Html5Qrcode
         document.getElementById('cameraView').style.display = 'block';
         this.style.display = 'none';
         
         html5QrCode = new Html5Qrcode("reader");
         
-        Html5Qrcode.getCameras().then(cameras => {
-            if (cameras && cameras.length) {
-                const cameraId = cameras[0].id;
-                
-                html5QrCode.start(
-                    cameraId,
-                    { fps: 10, qrbox: { width: 250, height: 250 } },
-                    (decodedText) => {
-                        lookupBarcode(decodedText);
-                    },
-                    (errorMessage) => {
-                        // Scanning...
-                    }
-                ).catch(err => {
-                    console.error("Camera error:", err);
-                    showToast('error', 'Failed to start camera');
-                });
+        // ✅ Use facingMode instead of cameraId (back camera)
+        html5QrCode.start(
+            { facingMode: "environment" },  // ✅ Back camera
+            { fps: 10, qrbox: { width: 250, height: 250 } },
+            (decodedText) => {
+                lookupBarcode(decodedText);
+            },
+            (errorMessage) => {
+                // Scanning...
             }
-        }).catch(err => {
-            console.error("No camera found:", err);
-            showToast('error', 'No camera found');
+        ).catch(err => {
+            console.error("Camera error:", err);
+            showToast('error', 'Failed to start camera');
         });
-    });
+        
+    } catch(err) {
+        console.error("Camera permission denied:", err);
+        showToast('error', 'Camera access denied. Please allow camera in browser settings.');
+    }
+});
     
     // Stop camera
     document.getElementById('stopCameraBtn').addEventListener('click', function() {
