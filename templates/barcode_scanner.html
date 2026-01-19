@@ -354,11 +354,7 @@ document.getElementById('barcodeInput')?.addEventListener('keypress', function(e
     }
 });
 
-// Process Scan
-// Global variable to store pending scan
-let pendingScanData = null;
 
-// Process Scan
 // Process Scan
 // ✅ Global variable to track last scanned barcodes
 let lastScannedBarcodes = {};
@@ -384,11 +380,11 @@ function processScan(barcode) {
     // ✅ Record this scan time
     lastScannedBarcodes[barcode] = now;
     
-    // ✅ Continue with normal scan process
+    // ✅ Continue with normal scan process (same as before!)
     fetch('/barcode/session/scan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ barcode: barcode })
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({barcode: barcode})
     })
     .then(response => response.json())
     .then(data => {
@@ -397,8 +393,8 @@ function processScan(barcode) {
             showToast('success', `✅ ${data.item.productcode} - ${data.item.colorname}`);
             
             // Add to session items
-            const variantId = data.item.variantid;
-            const existingIndex = sessionItems.findIndex(item => item.variantid === variantId);
+            const variantId = data.item.variant_id;
+            const existingIndex = sessionItems.findIndex(item => item.variant_id === variantId);
             
             if (existingIndex >= 0) {
                 // Item exists - increase quantity by 1
@@ -406,12 +402,12 @@ function processScan(barcode) {
             } else {
                 // New item - add with quantity 1
                 sessionItems.push({
-                    variantid: data.item.variantid,
-                    productcode: data.item.productcode,
-                    brandname: data.item.brandname,
-                    colorname: data.item.colorname,
-                    currentstock: data.item.stockquantity,
-                    imageurl: data.item.imageurl,
+                    variant_id: data.item.variant_id,
+                    product_code: data.item.productcode,
+                    brand_name: data.item.brandname,
+                    color_name: data.item.colorname,
+                    current_stock: data.item.stockquantity,
+                    image_url: data.item.imageurl,
                     quantity: 1
                 });
             }
