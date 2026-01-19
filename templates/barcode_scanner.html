@@ -288,38 +288,40 @@ document.getElementById('startSessionBtn')?.addEventListener('click', function()
 });
 
 // Camera Scanner
-document.getElementById('startCameraBtn')?.addEventListener('click', function() {
-    document.getElementById('cameraView').style.display = 'block';
-    this.style.display = 'none';
-    
-    html5QrCode = new Html5Qrcode("reader");
-    
-    Html5Qrcode.getCameras().then(cameras => {
-        if (cameras && cameras.length) {
-            const cameraId = cameras[0].id;
-            
-            html5QrCode.start(
-                cameraId,
-                {
-                    fps: 10,
-                    qrbox: { width: 250, height: 250 }
-                },
-                (decodedText, decodedResult) => {
-                    // Barcode scanned
-                    processScan(decodedText);
-                },
-                (errorMessage) => {
-                    // Scanning...
-                }
-            ).catch(err => {
-                console.error('Camera error:', err);
-                showToast('error', 'Failed to start camera');
-            });
-        }
-    }).catch(err => {
-        console.error('No camera found:', err);
-        showToast('error', 'No camera found');
-    });
+document.getElementById('startCameraBtn')?.addEventListener('click', async function() {
+    try {
+        // ✅ اطلب Permission أولاً
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: "environment" } 
+        });
+        
+        // ✅ أوقف الـ Stream بعد ما ناخد الإذن
+        stream.getTracks().forEach(track => track.stop());
+        
+        // ✅ دلوقتي شغّل Html5Qrcode
+        document.getElementById('cameraView').style.display = 'block';
+        this.style.display = 'none';
+        
+        html5QrCode = new Html5Qrcode("reader");
+        
+        html5QrCode.start(
+            { facingMode: "environment" },
+            {
+                fps: 10,
+                qrbox: { width: 250, height: 250 }
+            },
+            (decodedText, decodedResult) => {
+                processScan(decodedText);
+            },
+            (errorMessage) => {
+                // Scanning...
+            }
+        );
+        
+    } catch(err) {
+        console.error("Camera permission denied:", err);
+        showToast('error', 'Camera access denied. Please allow camera in browser settings.');
+    }
 });
 
 // Stop Camera
