@@ -552,13 +552,13 @@ function loadSessionItems() {
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>${index + 1}</td>
-            <td><img src="${imageUrl}" class="img-thumbnail" style="width: 50px; height: 50px; object-fit: cover; background: #f0f0f0" onerror="this.onerror=null; this.src='https://via.placeholder.com/100x100/f0f0f0/999999?text=No+Image'"></td>
+            <td> <a href="${imageUrl}" target="_blank" rel="noopener noreferrer"> <img src="${imageUrl}" class="img-thumbnail" style="width: 50px; height: 50px; object-fit: cover; background: #f0f0f0" onerror="this.onerror=null; this.src='https://via.placeholder.com/100x100/f0f0f0/999999?text=No+Image'"></td>
             <td><strong>${item.product_code || 'N/A'}</strong></td>
             <td>${item.brand_name || 'N/A'}</td>
             
             <!-- ✅ Quantity moved here (before Color) -->
             <td>
-                <div class="input-group input-group-sm" style="max-width: 150px">
+                <div class="input-group input-group-sm" style="min-width: 100px; max-width: 180px;">
                     <button class="btn btn-outline-secondary" onclick="changeQuantity(${item.variant_id}, -1)">
                         <i class="fas fa-minus"></i>
                     </button>
@@ -877,6 +877,18 @@ function showToast(type, message) {
     border: 2px solid #007bff;
     border-radius: 10px;
 }
+/* Hide default number input arrows (spinners) */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input[type="number"] {
+    -moz-appearance: textfield; /* Firefox */
+    appearance: textfield;
+}
+
 </style>
 
 {% endblock %}

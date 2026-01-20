@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
@@ -7,6 +7,13 @@ from datetime import datetime
 import json
 from database import StockDatabase
 from io import BytesIO
+# ✅ openpyxl imports
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Font
+from openpyxl.utils.exceptions import InvalidFileException
+import atexit
+import threading
+import time
 from dropbox_oauth_backup import DropboxOAuthBackup
 # أضف هذا مع الـ imports في الأعلى
 from barcode_utils import (
@@ -21,9 +28,6 @@ app = Flask(__name__)
 
 # إعدادات الأمان والإنتاج
 app.secret_key = os.environ.get('SECRET_KEY', 'fallback-secret-for-dev')
-
-from functools import wraps
-from flask import session
 
 # Session timeout (30 يوم)
 app.config['PERMANENT_SESSION_LIFETIME'] = 2592000  # 30 days in seconds
@@ -269,9 +273,6 @@ if not os.getenv('DATABASE_URL'):
     db.add_default_data()
     print("✅ Default data added!")
 
-import atexit
-import threading
-import time
 
 # إنشاء نظام النسخ الاحتياطية
 backup_system = DropboxOAuthBackup()
@@ -396,7 +397,6 @@ print("✅ تم بدء نظام النسخ الاحتياطية التلقائي
 def backup_on_exit():
     print("🔄 إنشاء نسخة احتياطية قبل الإغلاق...")
     # إضافة تأخير للتأكد من اكتمال العمليات
-    import time
     time.sleep(3)
     backup_system.create_backup()
 
@@ -1333,9 +1333,8 @@ def bulk_upload_excel():
             print(f"📁 Processing file: {file.filename}")
             
             # ✅ Read Excel with openpyxl (instead of pandas)
-            import openpyxl
             
-            wb = openpyxl.load_workbook(file, data_only=True)
+            wb = load_workbook(file, data_only=True)
             sheet = wb.active
             
             # Get headers from first row
@@ -1391,7 +1390,6 @@ def bulk_upload_excel():
             if result['success']:
                 # Backup after successful upload
                 print("📦 Creating backup after bulk upload...")
-                import time
                 time.sleep(2)
                 backup_success = backup_system.create_backup()
                 if backup_success:
@@ -1431,7 +1429,7 @@ def bulk_upload_excel():
                 flash(f'❌ {error_msg}', 'error')
                 print(f"❌ Bulk upload error: {error_msg}")
         
-        except openpyxl.utils.exceptions.InvalidFileException:
+        except InvalidFileException:
             flash('❌ الملف تالف أو ليس ملف Excel صالح!', 'error')
         
         except Exception as e:
@@ -1523,10 +1521,40 @@ def export_products():
                 flash('No products match the selected filters!', 'warning')
                 return redirect(url_for('export_products'))
             
-            # إنشاء Excel
-            df = pd.DataFrame(filtered_data)
+            # ✅ إنشاء Excel باستخدام openpyxl
+            
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Products"
+            
+            # ✅ كتابة الـ Headers
+            headers = ['Product Code', 'Brand Name', 'Product Type', 'Category', 'Size', 
+                      'Wholesale Price', 'Retail Price', 'Color Name', 'Stock', 'Image URL', 'Tags']
+            ws.append(headers)
+            
+            # ✅ تنسيق الـ Headers (bold)
+            for cell in ws[1]:
+                cell.font = Font(bold=True)
+            
+            # ✅ كتابة البيانات
+            for row_data in filtered_data:
+                ws.append([
+                    row_data['Product Code'],
+                    row_data['Brand Name'],
+                    row_data['Product Type'],
+                    row_data['Category'],
+                    row_data['Size'],
+                    row_data['Wholesale Price'],
+                    row_data['Retail Price'],
+                    row_data['Color Name'],
+                    row_data['Stock'],
+                    row_data['Image URL'],
+                    row_data['Tags']
+                ])
+            
+            # ✅ حفظ في BytesIO
             output = BytesIO()
-            df.to_excel(output, index=False, engine='openpyxl')
+            wb.save(output)
             output.seek(0)
             
             # تحديد اسم الملف حسب الفلاتر
@@ -1568,31 +1596,36 @@ def export_products():
 def download_excel_template():
     """تحميل نموذج Excel المحسن - نسخة مبسطة بدون تنسيق"""
     try:
-        template_data = {
-            'Product Code': ['96115', '96115', '96115', '87432', '87432', '75321'],
-            'Brand Name': ['Tommy Hilfiger', 'Tommy Hilfiger', 'Tommy Hilfiger', 'Gucci', 'Gucci', 'Zara'],
-            'Product Type': ['Handbag', 'Handbag', 'Handbag', 'Wallet', 'Wallet', 'Backpack'],
-            'Category': ['L', 'L', 'L', 'F', 'F', 'L'],
-            'Size': ['20×22×5', '20×22×5', '20×22×5', '15×18×3', '15×18×3', '25×30×10'],
-            'Wholesale Price': [1000, 1000, 1000, 1200, 1200, 800],
-            'Retail Price': [1500, 1500, 1500, 1800, 1800, 1200],
-            'Color Name': ['Black', 'Red', 'Brown', 'Gold', 'Silver', 'Navy Blue'],
-            'Stock': [15, 5, 3, 10, 8, 20],
-            'Image URL': [
-                'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400',
-                'https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=400',
-                'https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?w=400',
-                'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400',
-                'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400',
-                'https://images.unsplash.com/photo-1622560480605-d83c853bc5c3?w=400'
-            ],
-            'Tags': ['Sale,Medium', 'Sale,Medium', 'Sale,Medium', 'New Arrival,Small', 'New Arrival,Small', 'Summer,Large']
-        }
+        from openpyxl import Workbook
+        from openpyxl.styles import Font
         
-        df = pd.DataFrame(template_data)
+        # ✅ البيانات التجريبية
+        template_data = [
+            ['Product Code', 'Brand Name', 'Product Type', 'Category', 'Size', 'Wholesale Price', 'Retail Price', 'Color Name', 'Stock', 'Image URL', 'Tags'],
+            ['96115', 'Tommy Hilfiger', 'Handbag', 'L', '20×22×5', 1000, 1500, 'Black', 15, 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400', 'Sale,Medium'],
+            ['96115', 'Tommy Hilfiger', 'Handbag', 'L', '20×22×5', 1000, 1500, 'Red', 5, 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=400', 'Sale,Medium'],
+            ['96115', 'Tommy Hilfiger', 'Handbag', 'L', '20×22×5', 1000, 1500, 'Brown', 3, 'https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?w=400', 'Sale,Medium'],
+            ['87432', 'Gucci', 'Wallet', 'F', '15×18×3', 1200, 1800, 'Gold', 10, 'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400', 'New Arrival,Small'],
+            ['87432', 'Gucci', 'Wallet', 'F', '15×18×3', 1200, 1800, 'Silver', 8, 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400', 'New Arrival,Small'],
+            ['75321', 'Zara', 'Backpack', 'L', '25×30×10', 800, 1200, 'Navy Blue', 20, 'https://images.unsplash.com/photo-1622560480605-d83c853bc5c3?w=400', 'Summer,Large']
+        ]
         
+        # ✅ إنشاء Workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Products Template"
+        
+        # ✅ كتابة كل الصفوف (Headers + Data)
+        for row in template_data:
+            ws.append(row)
+        
+        # ✅ تنسيق الـ Headers (أول صف - bold)
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+        
+        # ✅ حفظ في BytesIO
         output = BytesIO()
-        df.to_excel(output, index=False, engine='openpyxl')
+        wb.save(output)
         output.seek(0)
         
         return send_file(
@@ -1862,26 +1895,26 @@ def logs():
 def export_logs():
     """Export logs to Excel"""
     try:
+                
         # Get all logs
         logs = db.get_all_logs(limit=10000)  # Get more for export
         
-        # Prepare data for Excel
-        logs_data = {
-            'Date': [],
-            'Time': [],
-            'Product Code': [],
-            'Brand': [],
-            'Type': [],
-            'Color': [],
-            'Old Stock': [],
-            'New Stock': [],
-            'Change': [],
-            'Operation': [],
-            'Source Page': [],
-            'User': [],
-            'Image URL': []  # ← عمود جديد!
-        }
+        # ✅ إنشاء Workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Activity Logs"
         
+        # ✅ كتابة الـ Headers
+        headers = ['Date', 'Time', 'Product Code', 'Brand', 'Type', 'Color', 
+                  'Old Stock', 'New Stock', 'Change', 'Operation', 'Source Page', 
+                  'User', 'Image URL']
+        ws.append(headers)
+        
+        # ✅ تنسيق الـ Headers (bold)
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+        
+        # ✅ كتابة البيانات
         for log in logs:
             # Parse created_date
             created_date = log[16] if log[16] else ''
@@ -1897,24 +1930,26 @@ def export_logs():
                 date_str = 'N/A'
                 time_str = 'N/A'
             
-            logs_data['Date'].append(date_str)
-            logs_data['Time'].append(time_str)
-            logs_data['Product Code'].append(log[4] or 'N/A')
-            logs_data['Brand'].append(log[5] or 'N/A')
-            logs_data['Type'].append(log[6] or 'N/A')
-            logs_data['Color'].append(log[7] or 'N/A')
-            logs_data['Old Stock'].append(log[9] if log[9] is not None else '-')
-            logs_data['New Stock'].append(log[10] if log[10] is not None else '-')
-            logs_data['Change'].append(log[11] if log[11] is not None else '-')
-            logs_data['Operation'].append(log[1] or 'N/A')
-            logs_data['Source Page'].append(log[14] or 'N/A')
-            logs_data['User'].append(log[12] or 'Admin')
-            logs_data['Image URL'].append(log[8] or '')  # ← صورة اللون!
+            # إضافة الصف
+            ws.append([
+                date_str,
+                time_str,
+                log[4] or 'N/A',                           # Product Code
+                log[5] or 'N/A',                           # Brand
+                log[6] or 'N/A',                           # Type
+                log[7] or 'N/A',                           # Color
+                log[9] if log[9] is not None else '-',    # Old Stock
+                log[10] if log[10] is not None else '-',  # New Stock
+                log[11] if log[11] is not None else '-',  # Change
+                log[1] or 'N/A',                           # Operation
+                log[14] or 'N/A',                          # Source Page
+                log[12] or 'Admin',                        # User
+                log[8] or ''                               # Image URL
+            ])
         
-        # Create Excel file
-        df = pd.DataFrame(logs_data)
+        # ✅ حفظ في BytesIO
         output = BytesIO()
-        df.to_excel(output, index=False, engine='openpyxl')
+        wb.save(output)
         output.seek(0)
         
         filename = f'stock_logs_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
@@ -1941,18 +1976,25 @@ def export_logs():
 @page_permission_required('barcode_system')
 def barcode_management():
     """Barcode management page"""
+    
     # Get filters
     search = request.args.get('search', '')
     brand_filter = request.args.get('brand', '')
     type_filter = request.args.get('type', '')
     color_filter = request.args.get('color', '')
-    tab = request.args.get('tab', 'without')  # 'without' or 'with'
+    tab = request.args.get('tab', 'without')
+    image_filter = request.args.get('image_filter', 'all')  # للـ With Barcode
+    stock_filter = request.args.get('stock_filter', '')  # ← NEW: للـ Without Barcode
     page = int(request.args.get('page', 1))
     per_page = 50
     offset = (page - 1) * per_page
     
     # Get statistics
     stats = db.get_barcode_stats()
+    
+    # Get image status stats (للـ With Barcode)
+    image_stats = db.count_barcode_image_status()
+    stats.update(image_stats)
     
     # Get filter options
     brands = db.get_brands_for_filter()
@@ -1961,55 +2003,55 @@ def barcode_management():
     
     # Get variants based on tab
     if tab == 'without':
+        # ✅ تطبيق الـ stock filter
         variants = db.get_variants_without_barcode(
             search=search,
             brand_filter=brand_filter,
             type_filter=type_filter,
             color_filter=color_filter,
             limit=per_page,
-            offset=offset
+            offset=offset,
+            in_stock_only=(stock_filter == 'in_stock')  # ← NEW
         )
         total_count = db.count_variants_without_barcode(
             search=search,
             brand_filter=brand_filter,
             type_filter=type_filter,
-            color_filter=color_filter
+            color_filter=color_filter,
+            in_stock_only=(stock_filter == 'in_stock')  # ← NEW
         )
     else:
-        variants = db.get_variants_with_barcode(
+        variants = db.get_barcodes_with_image_status(
             search=search,
             brand_filter=brand_filter,
             type_filter=type_filter,
             color_filter=color_filter,
+            image_filter=image_filter,
             limit=per_page,
             offset=offset
         )
-        total_count = db.count_variants_with_barcode(
-            search=search,
-            brand_filter=brand_filter,
-            type_filter=type_filter,
-            color_filter=color_filter
-        )
+        total_count = len(variants)
     
-    # Calculate pagination
     total_pages = (total_count + per_page - 1) // per_page
     has_more = page < total_pages
     
     return render_template('barcode_management.html',
-                         stats=stats,
-                         variants=variants,
-                         brands=brands,
-                         types=types,
-                         colors=colors,
-                         tab=tab,
-                         search=search,
-                         brand_filter=brand_filter,
-                         type_filter=type_filter,
-                         color_filter=color_filter,
-                         page=page,
-                         total_pages=total_pages,
-                         total_count=total_count,
-                         has_more=has_more)
+        stats=stats,
+        variants=variants,
+        brands=brands,
+        types=types,
+        colors=colors,
+        tab=tab,
+        image_filter=image_filter,
+        search=search,
+        brand_filter=brand_filter,
+        type_filter=type_filter,
+        color_filter=color_filter,
+        page=page,
+        total_pages=total_pages,
+        total_count=total_count,
+        has_more=has_more
+    )
 
 
 @app.route('/barcode/generate/<int:variant_id>', methods=['POST'])
@@ -2192,30 +2234,162 @@ def generate_all_barcodes():
             'error': str(e)
         }), 500
 
+@app.route('/barcode/generate_selected', methods=['POST'])
+@action_permission_required('barcode_system')
+def generate_selected_barcodes():
+    """Generate barcodes for selected variants"""
+    try:
+        data = request.get_json()
+        variant_ids = data.get('variant_ids', [])
+        
+        if not variant_ids:
+            return jsonify({
+                'success': False,
+                'error': 'No variants selected'
+            }), 400
+        
+        from barcode_utils import generate_barcode_for_variant
+        
+        success_count = 0
+        failed_count = 0
+        failed_items = []
+        user_id = session.get('user_id', 0)
+        
+        for variant_id in variant_ids:
+            try:
+                # Check if barcode already exists
+                existing = db.get_barcode_by_variant(variant_id)
+                if existing:
+                    failed_count += 1
+                    failed_items.append(f"Variant {variant_id}: Barcode already exists")
+                    continue
+                
+                # Get variant details
+                variant = db.get_variant_details_for_barcode(variant_id)
+                
+                if not variant:
+                    failed_count += 1
+                    failed_items.append(f"Variant {variant_id} not found")
+                    continue
+                
+                product_code = variant[1]
+                color_name = variant[4]
+                
+                # Generate barcode image
+                result = generate_barcode_for_variant(product_code, color_name, variant_id)
+                
+                if not result:
+                    failed_count += 1
+                    failed_items.append(f"{product_code} - {color_name}: Failed to generate")
+                    continue
+                
+                # ✅ حفظ في database
+                barcode_id = db.create_barcode(
+                    variant_id=variant_id,
+                    barcode_number=result['barcode'],
+                    image_path=result['image_path'],
+                    user_id=user_id
+                )
+                
+                if barcode_id:
+                    success_count += 1
+                    
+                    # Log the operation
+                    db.add_stock_log(
+                        operation_type="Barcode Generated (Selected)",
+                        product_id=None,
+                        variant_id=variant_id,
+                        product_code=product_code,
+                        brand_name=variant[2],
+                        product_type=variant[3],
+                        color_name=color_name,
+                        image_url=variant[7] or '',
+                        old_value=None,
+                        new_value=result['barcode'],
+                        username=session.get('fullname', 'User'),
+                        notes=f"Selected generation",
+                        source_page="Barcode Management",
+                        source_url=request.url
+                    )
+                else:
+                    failed_count += 1
+                    failed_items.append(f"{product_code} - {color_name}: Failed to save")
+                    
+            except Exception as e:
+                failed_count += 1
+                failed_items.append(f"Variant {variant_id}: {str(e)}")
+                print(f"❌ Error generating barcode for variant {variant_id}: {e}")
+        
+        return jsonify({
+            'success': True,
+            'success_count': success_count,
+            'failed_count': failed_count,
+            'failed_items': failed_items[:10],
+            'message': f'Generated {success_count} barcodes ({failed_count} failed)'
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in selected generation: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 
 @app.route('/barcode/view/<int:variant_id>')
 @action_permission_required('barcode_system')
 def view_barcode(variant_id):
     """Get barcode details for a variant (API endpoint)"""
     try:
+        # Get variant details
+        variant = db.get_variant_details_for_barcode(variant_id)
+        
+        if not variant:
+            return jsonify({
+                'success': False,
+                'error': 'Variant not found'
+            }), 404
+        
+        # Get barcode details
         barcode = db.get_barcode_by_variant(variant_id)
         
         if not barcode:
             return jsonify({
                 'success': False,
-                'error': 'Barcode not found'
+                'error': 'Barcode not found for this variant'
             }), 404
+        
+        # Prepare barcode image URL
+        barcode_image_url = None
+        if barcode[3]:  # image_path
+            # Convert file path to URL
+            if barcode[3].startswith('static/'):
+                barcode_image_url = '/' + barcode[3]
+            else:
+                barcode_image_url = barcode[3]
         
         return jsonify({
             'success': True,
-            'barcode_number': barcode[2],
-            'image_path': barcode[3],
-            'generated_at': str(barcode[4]) if barcode[4] else None,
-            'generated_by': barcode[6] if len(barcode) > 6 else None
+            'product_code': variant[1],
+            'brand_name': variant[2],
+            'product_type': variant[3],
+            'color_name': variant[4],
+            'current_stock': variant[6],
+            'image_url': variant[7],
+            'wholesale_price': variant[9] if len(variant) > 9 else 0,
+            'retail_price': variant[10] if len(variant) > 10 else 0,
+            'barcode': barcode[2],
+            'barcode_image_url': barcode_image_url,
+            'generated_at': str(barcode[4]) if barcode[4] else None
         })
         
     except Exception as e:
         print(f"❌ Error viewing barcode: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'success': False,
             'error': str(e)
@@ -2990,6 +3164,156 @@ def cleanup_sessions():
         flash(f'Error cleaning up sessions: {str(e)}', 'error')
     
     return redirect(url_for('barcode_scanner'))
+
+
+# ========================================
+# BARCODE IMAGE REGENERATION
+# ========================================
+
+@app.route('/barcode/regenerate/<int:variant_id>', methods=['POST'])
+@action_permission_required('barcode_system')
+def regenerate_single_barcode_image(variant_id):
+    """Regenerate barcode image for a single variant"""
+    try:
+        # Get variant details
+        variant = db.get_variant_details_for_barcode(variant_id)
+        
+        if not variant:
+            return jsonify({
+                'success': False,
+                'error': 'Variant not found'
+            }), 404
+        
+        product_code = variant[1]
+        color_name = variant[4]
+        
+        # Import barcode utils
+        from barcode_utils import generate_barcode_for_variant
+        
+        # Generate barcode image
+        result = generate_barcode_for_variant(product_code, color_name, variant_id)
+        
+        if not result:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to generate barcode image'
+            }), 500
+        
+        # Update database
+        db.update_barcode_image_path(variant_id, result['image_path'])
+        
+        # Log the operation
+        db.add_stock_log(
+            operation_type="Barcode Image Regenerated",
+            product_id=None,
+            variant_id=variant_id,
+            product_code=product_code,
+            brand_name=variant[2],
+            product_type=variant[3],
+            color_name=color_name,
+            image_url=variant[7] or '',
+            old_value=None,
+            new_value=None,
+            username=session.get('fullname', 'User'),
+            notes=f"Barcode image regenerated manually",
+            source_page="Barcode Management",
+            source_url=request.url
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': f'✅ Barcode image regenerated for {product_code} - {color_name}',
+            'image_path': result['image_path']
+        })
+        
+    except Exception as e:
+        print(f"❌ Error regenerating barcode image: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/barcode/regenerate_bulk', methods=['POST'])
+@action_permission_required('barcode_system')
+def regenerate_bulk_barcode_images():
+    """Regenerate barcode images for multiple variants"""
+    try:
+        data = request.get_json()
+        variant_ids = data.get('variant_ids', [])
+        
+        if not variant_ids:
+            return jsonify({
+                'success': False,
+                'error': 'No variants selected'
+            }), 400
+        
+        from barcode_utils import generate_barcode_for_variant
+        
+        success_count = 0
+        failed_count = 0
+        failed_items = []
+        
+        for variant_id in variant_ids:
+            try:
+                # Get variant details
+                variant = db.get_variant_details_for_barcode(variant_id)
+                
+                if not variant:
+                    failed_count += 1
+                    failed_items.append(f"Variant {variant_id} not found")
+                    continue
+                
+                product_code = variant[1]
+                color_name = variant[4]
+                
+                # Generate barcode image
+                result = generate_barcode_for_variant(product_code, color_name, variant_id)
+                
+                if result:
+                    # Update database
+                    db.update_barcode_image_path(variant_id, result['image_path'])
+                    success_count += 1
+                    
+                    # Log
+                    db.add_stock_log(
+                        operation_type="Barcode Image Regenerated (Bulk)",
+                        product_id=None,
+                        variant_id=variant_id,
+                        product_code=product_code,
+                        brand_name=variant[2],
+                        product_type=variant[3],
+                        color_name=color_name,
+                        image_url=variant[7] or '',
+                        old_value=None,
+                        new_value=None,
+                        username=session.get('fullname', 'User'),
+                        notes=f"Bulk regeneration",
+                        source_page="Barcode Management",
+                        source_url=request.url
+                    )
+                else:
+                    failed_count += 1
+                    failed_items.append(f"{product_code} - {color_name}")
+                    
+            except Exception as e:
+                failed_count += 1
+                failed_items.append(f"Variant {variant_id}: {str(e)}")
+        
+        return jsonify({
+            'success': True,
+            'success_count': success_count,
+            'failed_count': failed_count,
+            'failed_items': failed_items[:10],  # First 10 failures
+            'message': f'✅ Regenerated {success_count} images ({failed_count} failed)'
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in bulk regeneration: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 
 @app.errorhandler(404)
