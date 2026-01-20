@@ -151,10 +151,21 @@ let html5QrCode = null;
 
 // Lookup function
 function lookupBarcode(barcode) {
+    // ✅ تأكد إن الباركود String
+    barcode = String(barcode).trim();
+    
+    // ✅ حافظ على الأصفار للـ EAN-13
+    if (/^\d+$/.test(barcode) && barcode.length > 0 && barcode.length <= 13) {
+        barcode = barcode.padStart(13, '0');
+    }
+    
+    console.log('Looking up barcode:', barcode);
+    
     if (!barcode) {
         showToast('error', 'Please enter a barcode');
         return;
     }
+
     
     // Hide previous results
     document.getElementById('productCard').classList.add('d-none');
@@ -277,14 +288,21 @@ document.getElementById('startCameraBtn').addEventListener('click', async functi
         
         // ✅ Use facingMode instead of cameraId (back camera)
         html5QrCode.start(
-            { facingMode: "environment" },  // ✅ Back camera
-            { fps: 10, qrbox: { width: 250, height: 250 } },
-            (decodedText) => {
-                lookupBarcode(decodedText);
+            { facingMode: "environment" }, // Back camera
+            { fps: 10, qrbox: {width: 250, height: 250} },
+            (decodedText) => { 
+                // ✅ تأكد إن الباركود String وحافظ على الأصفار
+                let barcode = String(decodedText).trim();
+                
+                // ✅ لو باركود EAN-13 - تأكد إنه 13 رقم
+                if (/^\d+$/.test(barcode) && barcode.length <= 13) {
+                    barcode = barcode.padStart(13, '0');
+                }
+                
+                console.log('Scanned barcode:', barcode);
+                lookupBarcode(barcode); 
             },
-            (errorMessage) => {
-                // Scanning...
-            }
+            (errorMessage) => { /* Scanning... */ }
         ).catch(err => {
             console.error("Camera error:", err);
             showToast('error', 'Failed to start camera');

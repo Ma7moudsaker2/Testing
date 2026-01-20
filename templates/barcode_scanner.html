@@ -305,18 +305,22 @@ document.getElementById('startCameraBtn')?.addEventListener('click', async funct
         html5QrCode = new Html5Qrcode("reader");
         
         html5QrCode.start(
-            { facingMode: "environment" },
-            {
-                fps: 10,
-                qrbox: { width: 250, height: 250 }
+            { facingMode: "environment" }, // Back camera
+            { fps: 10, qrbox: {width: 250, height: 250} },
+            (decodedText) => { 
+                // ✅ تأكد إن الباركود String وحافظ على الأصفار
+                let barcode = String(decodedText).trim();
+                
+                // ✅ لو باركود EAN-13 - تأكد إنه 13 رقم
+                if (/^\d+$/.test(barcode) && barcode.length <= 13) {
+                    barcode = barcode.padStart(13, '0');
+                }
+                
+                console.log('Scanned barcode:', barcode);
+                processScan(barcode); 
             },
-            (decodedText, decodedResult) => {
-                processScan(decodedText);
-            },
-            (errorMessage) => {
-                // Scanning...
-            }
-        );
+            (errorMessage) => { /* Scanning... */ }
+        )
         
     } catch(err) {
         console.error("Camera permission denied:", err);
@@ -361,6 +365,16 @@ let lastScannedBarcodes = {};
 
 // Process Scan with duplicate prevention
 function processScan(barcode) {
+    // ✅ تأكد إن الباركود String
+    barcode = String(barcode).trim();
+    
+    // ✅ حافظ على الأصفار للـ EAN-13
+    if (/^\d+$/.test(barcode) && barcode.length > 0 && barcode.length <= 13) {
+        barcode = barcode.padStart(13, '0');
+    }
+    
+    console.log('Processing barcode:', barcode);
+    
     if (!sessionActive) {
         showToast('error', 'Please start a session first');
         playSound('error');

@@ -2497,7 +2497,13 @@ def barcode_session_scan():
     """Scan barcode and add to session"""
     try:
         data = request.get_json()
-        barcode = data.get('barcode')
+        barcode = str(data.get('barcode', '')).strip()
+        
+        # ✅ حافظ على الأصفار للـ EAN-13
+        if barcode.isdigit() and len(barcode) <= 13:
+            barcode = barcode.zfill(13)  # يضيف أصفار لو ناقصة
+        
+        print(f"📊 Scanning barcode: {barcode}")
         user_id = session.get('user_id', 0)
         
         if not barcode:
@@ -3115,7 +3121,15 @@ def barcode_lookup_page():
 def barcode_lookup(barcode):
     """Quick barcode lookup API"""
     try:
+        # ✅ حافظ على الأصفار
+        barcode = str(barcode).strip()
+        if barcode.isdigit() and len(barcode) <= 13:
+            barcode = barcode.zfill(13)
+        
+        print(f"🔍 Looking up barcode: {barcode}")
+        
         barcode_data = db.get_barcode_by_number(barcode)
+
         
         if not barcode_data:
             return jsonify({'success': False, 'error': 'Barcode not found'})
