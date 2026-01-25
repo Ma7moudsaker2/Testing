@@ -239,7 +239,7 @@
 
                 <!-- Product Preview Overlay (Hidden by default) -->
                 <div id="productOverlay" class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column"
-                    style="background: rgba(0,0,0,0.9); display: none; z-index: 1000;">
+                    style="background: rgba(0,0,0,0.9); display: none !important; z-index: 1000;">
 
                     <!-- Top Section: Product Info ONLY -->
                     <div class="text-center text-white" style="padding: 30px 20px;">
@@ -261,8 +261,8 @@
                     <!-- Spacer to push bottom content down -->
                     <div style="flex: 1;"></div>
 
-                    <!-- Bottom Section: Buttons ONLY -->
-                    <div class="text-center text-white pb-4">
+                    <!-- Bottom Section: Buttons ONLY (no padding-bottom to allow space for status) -->
+                    <div class="text-center text-white" style="padding-bottom: 80px;">
                         <!-- Action Buttons Row -->
                         <div class="d-flex gap-3 justify-content-center align-items-center px-3">
                             <!-- NEXT Button (Green, Left) -->
@@ -280,8 +280,9 @@
                     </div>
                 </div>
 
-                <!-- Scanning Status (Bottom) - Always visible, HIGHEST z-index -->
-                <div class="position-absolute bottom-0 start-0 w-100 text-center pb-3" style="z-index: 1100;">
+                <!-- Scanning Status (Above buttons, doesn't block clicks) -->
+                <div class="position-absolute start-0 w-100 text-center"
+                    style="bottom: 80px; z-index: 1100; pointer-events: none;">
                     <span id="scanStatus" class="badge bg-primary" style="font-size: 1em; padding: 10px 20px;">
                         <i class="fas fa-qrcode"></i> Ready to Scan
                     </span>
@@ -390,8 +391,8 @@
             // Start camera after modal is shown
             document.getElementById('cameraModal').addEventListener('shown.bs.modal', function () {
                 console.log('📷 Modal shown - clearing overlay and starting camera');
-                // Ensure overlay is hidden
-                document.getElementById('productOverlay').style.display = 'none';
+                // Ensure overlay is hidden (override !important)
+                document.getElementById('productOverlay').style.setProperty('display', 'none', 'important');
                 startCamera();
             }, { once: true });
 
@@ -456,8 +457,8 @@
     // Resume Camera (start scanning again)
     function resumeCamera() {
         console.log('▶️ Resuming camera - clearing overlay');
-        // Clear product overlay
-        document.getElementById('productOverlay').style.display = 'none';
+        // Clear product overlay (override !important)
+        document.getElementById('productOverlay').style.setProperty('display', 'none', 'important');
         document.getElementById('productCode').textContent = '-';
         document.getElementById('productColor').textContent = '-';
         document.getElementById('productStock').textContent = '0';
@@ -475,8 +476,8 @@
                 html5QrCode = null;
                 isCameraScanning = false;
 
-                // Clear product overlay state
-                document.getElementById('productOverlay').style.display = 'none';
+                // Clear product overlay state (override !important)
+                document.getElementById('productOverlay').style.setProperty('display', 'none', 'important');
                 document.getElementById('productCode').textContent = '-';
                 document.getElementById('productColor').textContent = '-';
                 document.getElementById('productStock').textContent = '0';
@@ -597,8 +598,8 @@
         document.getElementById('scanStatus').innerHTML = '<i class="fas fa-pause"></i> Paused';
         document.getElementById('scanStatus').className = 'badge bg-warning';
 
-        // Show overlay
-        document.getElementById('productOverlay').style.display = 'flex';
+        // Show overlay (override !important)
+        document.getElementById('productOverlay').style.setProperty('display', 'flex', 'important');
     }
 
     // NEXT Button - Resume scanning
