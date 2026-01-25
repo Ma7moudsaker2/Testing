@@ -1,4 +1,13 @@
+# -*- coding: utf-8 -*-
 import os
+import sys
+
+# Fix encoding for Windows console
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -14,6 +23,7 @@ from openpyxl.utils.exceptions import InvalidFileException
 import atexit
 import threading
 import time
+import dropbox
 from dropbox_oauth_backup import DropboxOAuthBackup
 # أضف هذا مع الـ imports في الأعلى
 from barcode_utils import (
@@ -101,32 +111,39 @@ def inject_user_data():
     user_id = session.get('user_id', 0)
     
     if user_id:
-        # Temporary: Give all permissions for testing
-        user_permissions = {
-            'dashboard': True,
-            'products_new': True,
-            'add_product_new': True,
-            'add_products_multi': True,
-            'barcode_system': True,
-            'inventory_management': True,
-            'bulk_upload_excel': True,
-            'export_products': True,
-            'manage_brands': True,
-            'manage_colors': True,
-            'manage_product_types': True,
-            'manage_tags': True,
-            'manage_trader_categories': True,
-            'user_management': True,
-            'logs': True,
-            'backup_system': True
-        }
+        # Super Admin (ID = 0) has all permissions
+        if user_id == 0:
+            user_permissions = {
+                'dashboard': True,
+                'products_new': True,
+                'add_product_new': True,
+                'add_products_multi': True,
+                'barcode_system': True,
+                'inventory_management': True,
+                'bulk_upload_excel': True,
+                'export_products': True,
+                'manage_brands': True,
+                'manage_colors': True,
+                'manage_product_types': True,
+                'manage_tags': True,
+                'manage_trader_categories': True,
+                'user_management': True,
+                'logs': True,
+                'backup_system': True
+            }
+            is_super_admin = True
+        else:
+            # Get real permissions from database for regular users
+            permissions_list = db.get_user_permissions(user_id)
+            user_permissions = {perm: True for perm in permissions_list}
+            is_super_admin = False
         
         return {
             'user_permissions': user_permissions,
             'user_id': user_id,
             'username': session.get('username', ''),
             'full_name': session.get('full_name', ''),
-            'is_super_admin': True
+            'is_super_admin': is_super_admin
         }
     
     return {
@@ -277,12 +294,19 @@ if not os.getenv('DATABASE_URL'):
 # إنشاء نظام النسخ الاحتياطية
 backup_system = DropboxOAuthBackup()
 
-# متغير للتأكد من تشغيل الكود مرة واحدة فقط
+# متغير للتأكد من تشغيل الكود مرة واحدة فقط (Thread-safe)
+startup_lock = threading.Lock()
 startup_completed = False
+
 @app.before_request
 def restore_on_startup():
     global startup_completed
-    if not startup_completed:
+    
+    # Thread-safe check
+    with startup_lock:
+        if startup_completed:
+            return
+        
         try:
             # === Restore Database ===
             conn = db.get_connection()
@@ -454,17 +478,19 @@ def login():
         password = request.form.get('password', '')
         
         # 1️⃣ Check Super Admin
-        SUPER_ADMIN_USERNAME = os.environ.get('SUPER_ADMIN_USERNAME', 'admin')
-        SUPER_ADMIN_PASSWORD = os.environ.get('SUPER_ADMIN_PASSWORD', 'admin123456')
+        SUPER_ADMIN_USERNAME = os.environ.get('SUPER_ADMIN_USERNAME','admin')
+        SUPER_ADMIN_PASSWORD = os.environ.get('SUPER_ADMIN_PASSWORD','admin')
         
-        if username == SUPER_ADMIN_USERNAME and password == SUPER_ADMIN_PASSWORD:
-            session['logged_in'] = True
-            session['user_id'] = 0
-            session['username'] = username
-            session['full_name'] = 'Super Admin'
-            session['role'] = 'Super Admin'
-            flash('Welcome Super Admin! 👑', 'success')
-            return redirect(url_for('dashboard'))
+        # Super Admin login (only if credentials are set in environment)
+        if SUPER_ADMIN_USERNAME and SUPER_ADMIN_PASSWORD:
+            if username == SUPER_ADMIN_USERNAME and password == SUPER_ADMIN_PASSWORD:
+                session['logged_in'] = True
+                session['user_id'] = 0
+                session['username'] = username
+                session['full_name'] = 'Super Admin'
+                session['role'] = 'Super Admin'
+                flash('Welcome Super Admin! 👑', 'success')
+                return redirect(url_for('dashboard'))
         
         # 2️⃣ Check Database Users
         user = db.get_user_by_username(username)

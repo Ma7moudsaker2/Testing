@@ -193,7 +193,7 @@ class BarcodeGenerator:
                 # ✅ كبّر الخط - كان 14
                 font_large = ImageFont.truetype("arial.ttf", 32)      # ← للكود
                 font_medium = ImageFont.truetype("arial.ttf", 28)     # ← للون
-            except:
+            except (IOError, OSError):
                 font_large = ImageFont.load_default()
                 font_medium = ImageFont.load_default()
             

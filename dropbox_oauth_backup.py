@@ -93,8 +93,8 @@ class DropboxOAuthBackup:
                             print("💡 الـ Refresh Token منتهي الصلاحية أو غير صحيح")
                         elif 'invalid_client' in error_description:
                             print("💡 App Key أو App Secret غير صحيح")
-                    except:
-                        print("🔍 لا يمكن تحليل تفاصيل الخطأ")
+                    except Exception as e:
+                        print(f"🔍 Cannot parse error details: {e}")
                 
                 return False
                 

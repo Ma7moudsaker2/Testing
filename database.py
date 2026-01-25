@@ -3,7 +3,6 @@ import os
 from urllib.parse import urlparse
 from datetime import datetime
 import requests
-from urllib.parse import urlparse
 import re
 import json
 try:
@@ -73,8 +72,9 @@ class StockDatabase:
             print("✅ Database already contains data")
             conn.close()
             return
-        except:
+        except Exception as e:
             # الجداول غير موجودة، نحتاج إنشاؤها
+            print(f"Database check error: {e}")
             conn.close()
             self.add_default_data()
             print("✅ Default data added to PostgreSQL")
@@ -249,7 +249,8 @@ class StockDatabase:
         try:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_date ON stock_logs(created_date DESC)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_operation ON stock_logs(operation_type)')
-        except:
+        except Exception as e:
+            print(f"Index creation warning: {e}")
             pass
 
                 # === USERS SYSTEM ===
@@ -300,7 +301,8 @@ class StockDatabase:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_active ON users(active)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_permissions_user ON user_permissions(user_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_permissions_page ON user_permissions(page_key)')
-        except:
+        except Exception as e:
+            print(f"Index creation warning: {e}")
             pass
         
         # Activity Logs Table
@@ -344,7 +346,8 @@ class StockDatabase:
         try:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_barcodes_variant ON barcodes(variant_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_barcodes_number ON barcodes(barcode_number)')
-        except:
+        except Exception as e:
+            print(f"Index creation warning: {e}")
             pass
 
         # Barcode Sessions table
@@ -365,7 +368,8 @@ class StockDatabase:
         try:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_sessions_user ON barcode_sessions(user_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_sessions_status ON barcode_sessions(status)')
-        except:
+        except Exception as e:
+            print(f"Index creation warning: {e}")
             pass
 
         print("✅ Barcode system tables created!")
@@ -962,7 +966,8 @@ class StockDatabase:
                         log['notes'], log['source_page'], log['source_url'],
                         log['created_date']))
                     imported += 1
-                except:
+                except Exception as e:
+                    print(f"Error importing log entry: {e}")
                     continue
             
             conn.commit()
@@ -1043,28 +1048,34 @@ class StockDatabase:
         return brands
     
     def add_brand(self, brand_name):
-        conn = self.get_connection()
-        cursor = conn.cursor()
+        conn = None
         try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
             cursor.execute('INSERT INTO brands (brand_name) VALUES (?)', (brand_name,))
             conn.commit()
-            conn.close()
             return True
-        except:
-            conn.close()
+        except Exception as e:
+            print(f"Error adding brand: {e}")
             return False
+        finally:
+            if conn:
+                conn.close()
     
     def update_brand(self, brand_id, new_name):
-        conn = self.get_connection()
-        cursor = conn.cursor()
+        conn = None
         try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
             cursor.execute('UPDATE brands SET brand_name = ? WHERE id = ?', (new_name, brand_id))
             conn.commit()
-            conn.close()
             return True
-        except:
-            conn.close()
+        except Exception as e:
+            print(f"Error updating brand: {e}")
             return False
+        finally:
+            if conn:
+                conn.close()
     
     def delete_brand(self, brand_id):
         conn = self.get_connection()
@@ -1103,16 +1114,19 @@ class StockDatabase:
         return colors
     
     def add_color(self, color_name, color_code='#FFFFFF'):
-        conn = self.get_connection()
-        cursor = conn.cursor()
+        conn = None
         try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
             cursor.execute('INSERT INTO colors (color_name, color_code) VALUES (?, ?)', (color_name, color_code))
             conn.commit()
-            conn.close()
             return True
-        except:
-            conn.close()
+        except Exception as e:
+            print(f"Error adding color: {e}")
             return False
+        finally:
+            if conn:
+                conn.close()
     
     def update_color(self, color_id, new_name, new_code):
         conn = self.get_connection()
@@ -1173,28 +1187,34 @@ class StockDatabase:
         return types
     
     def add_product_type(self, type_name):
-        conn = self.get_connection()
-        cursor = conn.cursor()
+        conn = None
         try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
             cursor.execute('INSERT INTO product_types (type_name) VALUES (?)', (type_name,))
             conn.commit()
-            conn.close()
             return True
-        except:
-            conn.close()
+        except Exception as e:
+            print(f"Error adding product type: {e}")
             return False
+        finally:
+            if conn:
+                conn.close()
     
     def update_product_type(self, type_id, new_name):
-        conn = self.get_connection()
-        cursor = conn.cursor()
+        conn = None
         try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
             cursor.execute('UPDATE product_types SET type_name = ? WHERE id = ?', (new_name, type_id))
             conn.commit()
-            conn.close()
             return True
-        except:
-            conn.close()
+        except Exception as e:
+            print(f"Error updating product type: {e}")
             return False
+        finally:
+            if conn:
+                conn.close()
     
     def delete_product_type(self, type_id):
         conn = self.get_connection()
@@ -1233,17 +1253,20 @@ class StockDatabase:
         return categories
 
     def add_trader_category(self, category_code, category_name, description=''):
-        conn = self.get_connection()
-        cursor = conn.cursor()
+        conn = None
         try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
             cursor.execute('INSERT INTO trader_categories (category_code, category_name, description) VALUES (?, ?, ?)',
                            (category_code, category_name, description))
             conn.commit()
-            conn.close()
             return True
-        except:
-            conn.close()
+        except Exception as e:
+            print(f"Error adding trader category: {e}")
             return False
+        finally:
+            if conn:
+                conn.close()
 
     def update_trader_category(self, category_id, new_code, new_name, new_description):
         conn = self.get_connection()
@@ -1306,17 +1329,20 @@ class StockDatabase:
         return tags
     
     def add_tag(self, tag_name, tag_category='general', tag_color='#6c757d', description=''):
-        conn = self.get_connection()
-        cursor = conn.cursor()
+        conn = None
         try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
             cursor.execute('INSERT INTO tags (tag_name, tag_category, tag_color, description) VALUES (?, ?, ?, ?)',
                            (tag_name, tag_category, tag_color, description))
             conn.commit()
-            conn.close()
             return True
-        except:
-            conn.close()
+        except Exception as e:
+            print(f"Error adding tag: {e}")
             return False
+        finally:
+            if conn:
+                conn.close()
     
     def update_tag(self, tag_id, new_name, new_category, new_color, new_description):
         conn = self.get_connection()
