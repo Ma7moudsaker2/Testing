@@ -219,10 +219,9 @@
                     <i class="fas fa-camera"></i> Camera Scanner
                 </h5>
                 <div class="d-flex gap-2">
-                    <!-- Flash/Torch Button (Mobile only) -->
-                    <button type="button" class="btn btn-outline-light btn-sm" id="toggleFlashBtn"
-                        style="display: none;">
-                        <i class="fas fa-flashlight"></i>
+                    <!-- Flash/Torch Button -->
+                    <button type="button" class="btn btn-outline-light btn-sm" id="toggleFlashBtn">
+                        <i class="fas fa-bolt"></i>
                     </button>
                     <!-- Switch Camera Button -->
                     <button type="button" class="btn btn-outline-light btn-sm" id="switchCameraBtn">
@@ -239,10 +238,11 @@
                 <div id="reader" style="width: 100%; height: 100%;"></div>
 
                 <!-- Product Preview Overlay (Hidden by default) -->
-                <div id="productOverlay"
-                    class="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+                <div id="productOverlay" class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column"
                     style="background: rgba(0,0,0,0.85); display: none !important; z-index: 1000;">
-                    <div class="text-center text-white" style="max-width: 400px; padding: 20px;">
+
+                    <!-- Top Section: Success Icon + Product Info -->
+                    <div class="text-center text-white" style="padding: 20px;">
                         <!-- Success Icon -->
                         <div class="mb-3">
                             <i class="fas fa-check-circle text-success" style="font-size: 4em;"></i>
@@ -255,20 +255,39 @@
                         </div>
 
                         <!-- Product Info -->
-                        <div class="mb-4" style="font-size: 1.1em;">
+                        <div class="mb-2" style="font-size: 1.1em;">
                             <p class="mb-2"><strong>Code:</strong> <span id="productCode">-</span></p>
                             <p class="mb-2"><strong>Color:</strong> <span id="productColor">-</span></p>
                             <p class="mb-0"><strong>Stock:</strong> <span id="productStock"
                                     class="badge bg-info">0</span></p>
                         </div>
+                    </div>
 
-                        <!-- Action Buttons -->
-                        <div class="d-flex gap-3 justify-content-center">
+                    <!-- Spacer to push bottom content down -->
+                    <div style="flex: 1;"></div>
+
+                    <!-- Bottom Section: Status + Buttons -->
+                    <div class="text-center text-white pb-4">
+                        <!-- Status Text (above buttons) -->
+                        <div class="mb-3">
+                            <span id="overlayStatus" class="badge bg-warning"
+                                style="font-size: 1em; padding: 10px 20px;">
+                                <i class="fas fa-pause"></i> Paused
+                            </span>
+                        </div>
+
+                        <!-- Action Buttons Row -->
+                        <div class="d-flex gap-3 justify-content-center align-items-center px-3">
                             <!-- NEXT Button (Green, Left) -->
                             <button type="button" class="btn btn-success btn-lg px-5" id="nextScanBtn"
                                 style="min-width: 150px;">
                                 <i class="fas fa-arrow-right"></i> NEXT
                             </button>
+
+                            <!-- Done Icon (Center) -->
+                            <div>
+                                <i class="fas fa-check-circle text-success" style="font-size: 2.5em;"></i>
+                            </div>
 
                             <!-- CLOSE Button (Red, Right) -->
                             <button type="button" class="btn btn-danger btn-lg px-5" id="closeOverlayBtn"
@@ -279,7 +298,7 @@
                     </div>
                 </div>
 
-                <!-- Scanning Status (Bottom) -->
+                <!-- Scanning Status (Bottom) - Always visible when camera is active -->
                 <div class="position-absolute bottom-0 start-0 w-100 text-center pb-3" style="z-index: 999;">
                     <span id="scanStatus" class="badge bg-primary" style="font-size: 1em; padding: 10px 20px;">
                         <i class="fas fa-qrcode"></i> Ready to Scan
@@ -298,24 +317,25 @@
     {% if active_session and active_session.exists %}
     let sessionActive = true;
     let sessionMode = '{{ active_session.mode }}';
-    
+
     // ✅ Parse items safely using JSON.parse()
     let sessionItems = [];
     try {
-        const itemsJson = {{ active_session.itemsjson | tojson }};
-        if (itemsJson && typeof itemsJson === 'string') {
-            sessionItems = JSON.parse(itemsJson);
-        } else if (Array.isArray(itemsJson)) {
-            sessionItems = itemsJson;
-        } else {
-            sessionItems = [];
-        }
-        console.log('✅ Loaded session items:', sessionItems);
+        const itemsJson = {{ active_session.itemsjson | tojson
+    }};
+    if (itemsJson && typeof itemsJson === 'string') {
+        sessionItems = JSON.parse(itemsJson);
+    } else if (Array.isArray(itemsJson)) {
+        sessionItems = itemsJson;
+    } else {
+        sessionItems = [];
+    }
+    console.log('✅ Loaded session items:', sessionItems);
     } catch (e) {
         console.error('❌ Error parsing session items:', e);
         sessionItems = [];
     }
-    
+
     let html5QrCode = null;
     {% else %}
     let sessionActive = false;
@@ -387,6 +407,7 @@
 
             // Start camera after modal is shown
             document.getElementById('cameraModal').addEventListener('shown.bs.modal', function () {
+                clearProductOverlay(); // Clear any previous product data
                 startCamera();
             }, { once: true });
 
@@ -413,8 +434,8 @@
             { facingMode: currentFacingMode },
             {
                 fps: 10,
-                qrbox: { width: 250, height: 250 },
-                aspectRatio: 1.0
+                qrbox: { width: 350, height: 200 },  // Landscape guiding box
+                aspectRatio: 16 / 9  // Landscape camera orientation
             },
             (decodedText) => {
                 if (!isCameraScanning) return; // Ignore if paused
@@ -438,10 +459,7 @@
             if (cameraModal) cameraModal.hide();
         });
 
-        // Show flash button on mobile
-        if (/Mobile|Android|iPhone|iPad/i.test(navigator.userAgent)) {
-            document.getElementById('toggleFlashBtn').style.display = 'block';
-        }
+        // Flash button is now always visible, but check for torch support when clicked
     }
 
     // Pause Camera (stop scanning but keep stream)
@@ -453,12 +471,16 @@
 
     // Resume Camera (start scanning again)
     function resumeCamera() {
+        // Clear product overlay
+        document.getElementById('productOverlay').style.display = 'none';
+        document.getElementById('productCode').textContent = '-';
+        document.getElementById('productColor').textContent = '-';
+        document.getElementById('productStock').textContent = '0';
+        document.getElementById('productImage').src = '';
+
         isCameraScanning = true;
         document.getElementById('scanStatus').innerHTML = '<i class="fas fa-qrcode"></i> Scanning...';
         document.getElementById('scanStatus').className = 'badge bg-success';
-
-        // Hide overlay
-        document.getElementById('productOverlay').style.display = 'none';
     }
 
     // Stop Camera
@@ -467,6 +489,15 @@
             html5QrCode.stop().then(() => {
                 html5QrCode = null;
                 isCameraScanning = false;
+
+                // Clear product overlay state
+                document.getElementById('productOverlay').style.display = 'none';
+                document.getElementById('productCode').textContent = '-';
+                document.getElementById('productColor').textContent = '-';
+                document.getElementById('productStock').textContent = '0';
+                document.getElementById('productImage').src = '';
+                document.getElementById('scanStatus').innerHTML = '<i class="fas fa-qrcode"></i> Ready to Scan';
+                document.getElementById('scanStatus').className = 'badge bg-primary';
             }).catch(err => {
                 console.error('Error stopping camera:', err);
             });
